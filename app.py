@@ -53,28 +53,119 @@ def calculate():
     deduction = float(d.get("deduction", 0))
     profile = d.get("profile", "equilibrato")
 
-    # Simplified sales-model simulation. For a detailed hourly model,
-    # replace this block with PVGIS seriescalc + hourly load profile.
-    direct_pct = {"giorno": 0.55, "equilibrato": 0.40, "sera": 0.28}.get(profile, 0.40)
+        # Modello economico semplificato ma più realistico.
+    #
+    # L'autoconsumo dipende dal profilo dei consumi e dalla capacità
+    # della batteria. La produzione viene ridotta dello 0,5% ogni anno.
+    #
+    # Il prezzo dell'energia acquistata può aumentare nel tempo.
+    # Il valore dell'energia immessa rimane separato.
+
+    direct_pct = {
+        "giorno": 0.55,
+        "equilibrato": 0.40,
+        "sera": 0.28
+    }.get(profile, 0.40)
+
+    # Contributo della batteria all'autoconsumo.
     battery_boost = min(0.25, battery / 30.0)
-    self_consumption_pct = min(0.95, direct_pct + battery_boost)
-    self_used = min(production * self_consumption_pct, consumption)
-    export = max(0, production - self_used)
-    grid = max(0, consumption - self_used)
-    annual_saving = self_used * price + export * export_price
-    net_cost = max(0, cost - deduction)
-    payback = net_cost / annual_saving if annual_saving else None
+
+    self_consumption_pct = min(
+        0.95,
+        direct_pct + battery_boost
+    )
+
+    self_used = min(
+        production * self_consumption_pct,
+        consumption
+    )
+
+    export = max(
+        0,
+        production - self_used
+    )
+
+    grid = max(
+        0,
+        consumption - self_used
+    )
+
+    # Risparmio del primo anno.
+    annual_saving = (
+        self_used * price
+        + export * export_price
+    )
+
+    net_cost = max(
+        0,
+        cost - deduction
+    )
+
+    payback = (
+        net_cost / annual_saving
+        if annual_saving
+        else None
+    )
+
+    # ---------------------------------------------------------
+    # PROIEZIONE ECONOMICA 25 ANNI
+    # ---------------------------------------------------------
+    #
+    # Degrado FV: 0,5% annuo
+    # Aumento ipotizzato prezzo energia: 2% annuo
+    #
+    # Il prezzo dell'energia immessa resta invariato.
+    #
+
+    degradation = 0.005
+    energy_price_growth = 0.02
 
     years = []
-    cumulative = -net_cost
-    degradation = 0.005
-    for y in range(1, 26):
-        benefit = annual_saving * ((1-degradation) ** (y-1))
-        cumulative += benefit
-        years.append({"year": y, "benefit": benefit, "cumulative": cumulative})
 
-    return jsonify({
-        "self_used": self_used,
+    cumulative = -net_cost
+
+    for y in range(1, 26):
+
+        # Produzione dell'anno considerando il degrado
+        production_y = production * (
+            (1 - degradation) ** (y - 1)
+        )
+
+        # Manteniamo la stessa percentuale di autoconsumo
+        self_used_y = min(
+            production_y * self_consumption_pct,
+            consumption
+        )
+
+        export_y = max(
+            0,
+            production_y - self_used_y
+        )
+
+        # Prezzo energia acquistata nell'anno considerato
+        energy_price_y = price * (
+            (1 + energy_price_growth) ** (y - 1)
+        )
+
+        # Beneficio economico dell'anno
+        benefit = (
+            self_used_y * energy_price_y
+            + export_y * export_price
+        )
+
+        cumulative += benefit
+
+        years.append({
+            "year": y,
+            "benefit": benefit,
+            "cumulative": cumulative,
+            "production": production_y,
+            "self_used": self_used_y,
+            "export": export_y,
+            "energy_price": energy_price_y
+        })
+
+    return jsonify({"self_used": self_used,
         "export": export,
         "grid_purchase": grid,
         "annual_saving": annual_saving,
