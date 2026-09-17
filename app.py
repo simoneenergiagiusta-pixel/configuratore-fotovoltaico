@@ -104,8 +104,7 @@ def calculate():
         # Calcolo del rientro effettivo dell'investimento.
     # Verrà individuato l'anno in cui il beneficio cumulato
     # supera l'investimento netto.
-
-    payback = None
+     payback = None
     )
 
     # ---------------------------------------------------------
@@ -154,10 +153,13 @@ def calculate():
             + export_y * export_price
         )
 
-        cumulative += benefit
+                cumulative += benefit
 
-        years.append({
-            "year": y,
+        # Primo anno in cui l'investimento viene recuperato
+        if payback is None and cumulative >= 0:
+            payback = y
+
+        years.append({            "year": y,
             "benefit": benefit,
             "cumulative": cumulative,
             "production": production_y,
