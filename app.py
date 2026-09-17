@@ -101,10 +101,11 @@ def calculate():
         cost - deduction
     )
 
-    payback = (
-        net_cost / annual_saving
-        if annual_saving
-        else None
+        # Calcolo del rientro effettivo dell'investimento.
+    # Verrà individuato l'anno in cui il beneficio cumulato
+    # supera l'investimento netto.
+
+    payback = None
     )
 
     # ---------------------------------------------------------
