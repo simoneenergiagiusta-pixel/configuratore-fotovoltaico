@@ -1,0 +1,139 @@
+
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Configuratore Fotovoltaico</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Configuratore Fotovoltaico</h1>
+    <p>Produzione geolocalizzata + stima del ritorno dell'investimento</p>
+  </header>
+
+  <section class="card">
+    <h2>1. Dati impianto e cliente</h2>
+    <div class="grid">
+      <label>Indirizzo
+        <input id="address" placeholder="Via, civico, CAP, Comune">
+      </label>
+      <label>Latitudine
+        <input id="lat" type="number" step="0.000001" placeholder="es. 41.90">
+      </label>
+      <label>Longitudine
+        <input id="lon" type="number" step="0.000001" placeholder="es. 12.50">
+      </label>
+      <label>Potenza FV (kWp)
+        <input id="kwp" type="number" step="0.01" value="6">
+      </label>
+      <label>Batteria (kWh)
+        <input id="battery" type="number" step="0.1" value="6.2">
+      </label>
+      <label>Inclinazione (°)
+        <input id="angle" type="number" step="1" value="30">
+      </label>
+      <label>Orientamento / azimuth
+        <select id="aspect">
+          <option value="-90">Est (-90°)</option>
+          <option value="0" selected>Sud (0°)</option>
+          <option value="90">Ovest (90°)</option>
+        </select>
+      </label>
+      <label>Perdite sistema (%)
+        <input id="loss" type="number" step="0.1" value="14">
+      </label>
+      <label>Consumo annuo (kWh)
+        <input id="consumption" type="number" step="1" value="6500">
+      </label>
+      <label>Profilo consumi
+        <select id="profile">
+          <option value="giorno">Prevalentemente giorno</option>
+          <option value="equilibrato" selected>Equilibrato</option>
+          <option value="sera">Prevalentemente sera/notte</option>
+        </select>
+      </label>
+      <label>Costo impianto (€)
+        <input id="cost" type="number" step="1" value="10990">
+      </label>
+      <label>Detrazione totale (€)
+        <input id="deduction" type="number" step="1" value="5495">
+      </label>
+      <label>Prezzo energia acquistata (€/kWh)
+        <input id="energy_price" type="number" step="0.01" value="0.25">
+      </label>
+      <label>Valore energia immessa (€/kWh)
+        <input id="export_price" type="number" step="0.01" value="0.10">
+      </label>
+    </div>
+    <p class="note">Per la geolocalizzazione, inserisci latitudine e longitudine. L'indirizzo resta disponibile nel report cliente. In una versione online possiamo aggiungere un servizio di geocoding.</p>
+    <button onclick="getPVGIS()">🔎 CALCOLA PRODUZIONE CON PVGIS</button>
+  </section>
+
+  <section class="card">
+    <h2>2. Risultato PVGIS</h2>
+    <div id="pvgisResult" class="result">Inserisci le coordinate e avvia il calcolo.</div>
+  </section>
+
+  <section class="card">
+    <h2>3. Ritorno dell'investimento</h2>
+    <button onclick="calculate()">📊 CALCOLA RITORNO DELL'INVESTIMENTO</button>
+    <div id="roiResult" class="result"></div>
+  </section>
+</div>
+<script>
+let annualProduction = 0;
+
+const v = id => document.getElementById(id).value;
+
+async function getPVGIS(){
+  const result = document.getElementById("pvgisResult");
+  if(!v("lat") || !v("lon")) { result.innerHTML = "<b>Inserisci latitudine e longitudine.</b>"; return; }
+  result.innerHTML = "Calcolo PVGIS in corso…";
+  try {
+    const r = await fetch("/api/pvgis", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        lat:v("lat"), lon:v("lon"), kwp:v("kwp"), angle:v("angle"),
+        aspect:v("aspect"), loss:v("loss")
+      })
+    });
+    const d = await r.json();
+    annualProduction = d.annual_kwh;
+    result.innerHTML = `<div class="big">${d.annual_kwh.toFixed(0)} kWh/anno</div>
+      <p>Produzione stimata da PVGIS 5.3, con posizione, potenza, inclinazione, orientamento e perdite impostate.</p>
+      <div class="months">${d.monthly_kwh.map((x,i)=>`<span><b>${i+1}</b><br>${x.toFixed(0)}</span>`).join("")}</div>`;
+  } catch(e) {
+    result.innerHTML = "<b>Errore nel collegamento a PVGIS.</b><br>Controlla coordinate e connessione internet del computer che esegue l'app.";
+  }
+}
+
+async function calculate(){
+  const result = document.getElementById("roiResult");
+  if(!annualProduction){ result.innerHTML = "Prima esegui il calcolo PVGIS."; return; }
+  result.innerHTML = "Calcolo in corso…";
+  const r = await fetch("/api/calculate", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      production:annualProduction, consumption:v("consumption"), battery:v("battery"),
+      energy_price:v("energy_price"), export_price:v("export_price"), cost:v("cost"),
+      deduction:v("deduction"), profile:v("profile")
+    })
+  });
+  const d = await r.json();
+  result.innerHTML = `
+    <div class="kpis">
+      <div><small>Produzione</small><b>${annualProduction.toFixed(0)} kWh</b></div>
+      <div><small>Autoconsumo stimato</small><b>${d.self_used.toFixed(0)} kWh</b></div>
+      <div><small>Energia immessa</small><b>${d.export.toFixed(0)} kWh</b></div>
+      <div><small>Risparmio annuo</small><b>€ ${d.annual_saving.toFixed(0)}</b></div>
+      <div><small>Investimento netto</small><b>€ ${d.net_cost.toFixed(0)}</b></div>
+      <div><small>Payback indicativo</small><b>${d.payback ? d.payback.toFixed(1)+" anni" : "n.d."}</b></div>
+    </div>
+    <p class="note">Stima commerciale: il risultato dipende da tariffe, profilo reale dei consumi, condizioni di scambio/ritiro, ombreggiamento e altri fattori. Non è un preventivo finanziario.</p>`;
+}
+</script>
+</body>
+</html>
