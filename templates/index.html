@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="it">
 <head>
@@ -68,21 +67,33 @@
         <input id="export_price" type="number" step="0.01" value="0.10">
       </label>
     </div>
-    <p class="note">Per la geolocalizzazione, inserisci latitudine e longitudine. L'indirizzo resta disponibile nel report cliente. In una versione online possiamo aggiungere un servizio di geocoding.</p>
+
+    <p class="note">
+      Per la geolocalizzazione, inserisci latitudine e longitudine.
+      L'indirizzo resta disponibile nel report cliente.
+    </p>
+
     <button onclick="getPVGIS()">🔎 CALCOLA PRODUZIONE CON PVGIS</button>
   </section>
 
   <section class="card">
     <h2>2. Risultato PVGIS</h2>
-    <div id="pvgisResult" class="result">Inserisci le coordinate e avvia il calcolo.</div>
+    <div id="pvgisResult" class="result">
+      Inserisci le coordinate e avvia il calcolo.
+    </div>
   </section>
 
   <section class="card">
     <h2>3. Ritorno dell'investimento</h2>
-    <button onclick="calculate()">📊 CALCOLA RITORNO DELL'INVESTIMENTO</button>
+
+    <button onclick="calculate()">
+      📊 CALCOLA RITORNO DELL'INVESTIMENTO
+    </button>
+
     <div id="roiResult" class="result"></div>
   </section>
 </div>
+
 <script>
 let annualProduction = 0;
 
@@ -90,50 +101,235 @@ const v = id => document.getElementById(id).value;
 
 async function getPVGIS(){
   const result = document.getElementById("pvgisResult");
-  if(!v("lat") || !v("lon")) { result.innerHTML = "<b>Inserisci latitudine e longitudine.</b>"; return; }
+
+  if(!v("lat") || !v("lon")){
+    result.innerHTML = "<b>Inserisci latitudine e longitudine.</b>";
+    return;
+  }
+
   result.innerHTML = "Calcolo PVGIS in corso…";
+
   try {
     const r = await fetch("/api/pvgis", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-        lat:v("lat"), lon:v("lon"), kwp:v("kwp"), angle:v("angle"),
-        aspect:v("aspect"), loss:v("loss")
+        lat:v("lat"),
+        lon:v("lon"),
+        kwp:v("kwp"),
+        angle:v("angle"),
+        aspect:v("aspect"),
+        loss:v("loss")
       })
     });
+
     const d = await r.json();
+
     annualProduction = d.annual_kwh;
-    result.innerHTML = `<div class="big">${d.annual_kwh.toFixed(0)} kWh/anno</div>
-      <p>Produzione stimata da PVGIS 5.3, con posizione, potenza, inclinazione, orientamento e perdite impostate.</p>
-      <div class="months">${d.monthly_kwh.map((x,i)=>`<span><b>${i+1}</b><br>${x.toFixed(0)}</span>`).join("")}</div>`;
+
+    result.innerHTML = `
+      <div class="big">
+        ${d.annual_kwh.toFixed(0)} kWh/anno
+      </div>
+
+      <p>
+        Produzione stimata da PVGIS 5.3, con posizione, potenza,
+        inclinazione, orientamento e perdite impostate.
+      </p>
+
+      <div class="months">
+        ${d.monthly_kwh.map((x,i)=>
+          `<span><b>${i+1}</b><br>${x.toFixed(0)}</span>`
+        ).join("")}
+      </div>`;
+      
   } catch(e) {
-    result.innerHTML = "<b>Errore nel collegamento a PVGIS.</b><br>Controlla coordinate e connessione internet del computer che esegue l'app.";
+
+    result.innerHTML =
+      "<b>Errore nel collegamento a PVGIS.</b><br>" +
+      "Controlla coordinate e connessione internet del computer che esegue l'app.";
   }
 }
 
+
 async function calculate(){
+
   const result = document.getElementById("roiResult");
-  if(!annualProduction){ result.innerHTML = "Prima esegui il calcolo PVGIS."; return; }
+
+  if(!annualProduction){
+    result.innerHTML = "Prima esegui il calcolo PVGIS.";
+    return;
+  }
+
   result.innerHTML = "Calcolo in corso…";
-  const r = await fetch("/api/calculate", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      production:annualProduction, consumption:v("consumption"), battery:v("battery"),
-      energy_price:v("energy_price"), export_price:v("export_price"), cost:v("cost"),
-      deduction:v("deduction"), profile:v("profile")
-    })
-  });
-  const d = await r.json();
-  result.innerHTML = `
-    <div class="kpis">
-      <div><small>Produzione</small><b>${annualProduction.toFixed(0)} kWh</b></div>
-      <div><small>Autoconsumo stimato</small><b>${d.self_used.toFixed(0)} kWh</b></div>
-      <div><small>Energia immessa</small><b>${d.export.toFixed(0)} kWh</b></div>
-      <div><small>Risparmio annuo</small><b>€ ${d.annual_saving.toFixed(0)}</b></div>
-      <div><small>Investimento netto</small><b>€ ${d.net_cost.toFixed(0)}</b></div>
-      <div><small>Payback indicativo</small><b>${d.payback ? d.payback.toFixed(1)+" anni" : "n.d."}</b></div>
-    </div>
-    <p class="note">Stima commerciale: il risultato dipende da tariffe, profilo reale dei consumi, condizioni di scambio/ritiro, ombreggiamento e altri fattori. Non è un preventivo finanziario.</p>`;
+
+  try {
+
+    const r = await fetch("/api/calculate", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+
+      body:JSON.stringify({
+        production:annualProduction,
+        consumption:v("consumption"),
+        battery:v("battery"),
+        energy_price:v("energy_price"),
+        export_price:v("export_price"),
+        cost:v("cost"),
+        deduction:v("deduction"),
+        profile:v("profile")
+      })
+    });
+
+    const d = await r.json();
+
+    const formatEuro = value =>
+      "€ " + value.toLocaleString("it-IT", {
+        maximumFractionDigits:0
+      });
+
+    const payback =
+      d.payback
+      ? d.payback.toFixed(1) + " anni"
+      : "n.d.";
+
+
+    /*
+      Calcoliamo il beneficio cumulato
+      negli anni chiave della simulazione.
+    */
+
+    const milestones = [1,5,10,15,20,25];
+
+    const rows = milestones.map(year => {
+
+      const item = d.years.find(x => x.year === year);
+
+      if(!item) return "";
+
+      return `
+        <tr>
+          <td><b>${year}° anno</b></td>
+          <td>${formatEuro(item.benefit)}</td>
+          <td><b>${formatEuro(Math.max(0,item.cumulative))}</b></td>
+        </tr>
+      `;
+    }).join("");
+
+
+    result.innerHTML = `
+
+      <div class="kpis">
+
+        <div>
+          <small>Produzione</small>
+          <b>${annualProduction.toFixed(0)} kWh</b>
+        </div>
+
+        <div>
+          <small>Autoconsumo stimato</small>
+          <b>${d.self_used.toFixed(0)} kWh</b>
+        </div>
+
+        <div>
+          <small>Energia immessa</small>
+          <b>${d.export.toFixed(0)} kWh</b>
+        </div>
+
+        <div>
+          <small>Risparmio annuo</small>
+          <b>${formatEuro(d.annual_saving)}</b>
+        </div>
+
+        <div>
+          <small>Investimento netto</small>
+          <b>${formatEuro(d.net_cost)}</b>
+        </div>
+
+        <div>
+          <small>Payback indicativo</small>
+          <b>${payback}</b>
+        </div>
+
+      </div>
+
+
+      <div class="projection">
+
+        <h3>📈 PROIEZIONE ECONOMICA</h3>
+
+        <p>
+          Stima del beneficio economico cumulato nel tempo,
+          considerando un degrado della produzione dello 0,5% annuo.
+        </p>
+
+        <table class="projection-table">
+
+          <thead>
+            <tr>
+              <th>Periodo</th>
+              <th>Beneficio dell'anno</th>
+              <th>Beneficio cumulato</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${rows}
+          </tbody>
+
+        </table>
+
+      </div>
+
+
+      <div class="summary">
+
+        <div>
+          <span>💶 Investimento netto</span>
+          <strong>${formatEuro(d.net_cost)}</strong>
+        </div>
+
+        <div>
+          <span>⏱️ Rientro stimato</span>
+          <strong>${payback}</strong>
+        </div>
+
+        <div>
+          <span>📊 Beneficio cumulato a 25 anni</span>
+          <strong>
+            ${formatEuro(
+              d.years.length
+              ? Math.max(0,d.years[d.years.length-1].cumulative)
+              : 0
+            )}
+          </strong>
+        </div>
+
+      </div>
+
+
+      <p class="note">
+
+        Stima commerciale: il risultato dipende da tariffe,
+        profilo reale dei consumi, condizioni di scambio/ritiro,
+        ombreggiamento e altri fattori.
+
+        <br><br>
+
+        Non è un preventivo finanziario.
+
+      </p>
+    `;
+
+  } catch(e) {
+
+    result.innerHTML =
+      "<b>Errore nel calcolo.</b><br>" +
+      "Controlla i dati inseriti e riprova.";
+
+  }
 }
+
 </script>
 </body>
 </html>
