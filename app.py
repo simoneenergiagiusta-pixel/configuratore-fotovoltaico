@@ -6,22 +6,11 @@ import io
 import math
 from datetime import datetime
 
+from reportlab.pdfgen import canvas
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    Table,
-    TableStyle,
-    PageBreak
-)
-from reportlab.graphics.shapes import Drawing
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
 app = Flask(__name__)
 
@@ -33,31 +22,23 @@ PVGIS_URL = "https://re.jrc.ec.europa.eu/api/v5_3/PVcalc"
 # =========================================================
 
 def pvgis(params):
-
     url = PVGIS_URL + "?" + urlencode(params)
-
     req = Request(
         url,
-        headers={
-            "User-Agent": "ConfiguratoreFotovoltaico/1.0"
-        }
+        headers={"User-Agent": "ConfiguratoreFotovoltaico/1.0"}
     )
 
     with urlopen(req, timeout=20) as r:
-        return json.loads(
-            r.read().decode("utf-8")
-        )
+        return json.loads(r.read().decode("utf-8"))
 
 
 @app.get("/")
 def index():
-
     return render_template("index.html")
 
 
 @app.post("/api/pvgis")
 def api_pvgis():
-
     d = request.get_json(force=True)
 
     params = {
@@ -76,10 +57,7 @@ def api_pvgis():
     fixed = data["outputs"]["monthly"]["fixed"]
     yearly = data["outputs"]["totals"]["fixed"]
 
-    monthly = [
-        x["E_m"]
-        for x in fixed
-    ]
+    monthly = [x["E_m"] for x in fixed]
 
     return jsonify({
         "annual_kwh": yearly["E_y"],
@@ -89,65 +67,30 @@ def api_pvgis():
 
 
 # =========================================================
-# CALCOLO ECONOMICO
+# CALCOLI
 # =========================================================
 
 def calculate_values(d):
 
-    production = float(
-        d["production"]
-    )
+    production = float(d["production"])
+    consumption = float(d["consumption"])
+    battery = float(d.get("battery", 0))
 
-    consumption = float(
-        d["consumption"]
-    )
+    price = float(d.get("energy_price", 0.25))
+    export_price = float(d.get("export_price", 0.10))
 
-    battery = float(
-        d.get("battery", 0)
-    )
+    cost = float(d["cost"])
+    deduction = float(d.get("deduction", 0))
 
-    price = float(
-        d.get("energy_price", 0.25)
-    )
-
-    export_price = float(
-        d.get("export_price", 0.10)
-    )
-
-    cost = float(
-        d["cost"]
-    )
-
-    deduction = float(
-        d.get("deduction", 0)
-    )
-
-    profile = d.get(
-        "profile",
-        "equilibrato"
-    )
-
-    # -----------------------------------------------------
-    # MODELLO DI AUTOCONSUMO
-    # -----------------------------------------------------
+    profile = d.get("profile", "equilibrato")
 
     direct_pct = {
-
         "giorno": 0.55,
-
         "equilibrato": 0.40,
-
         "sera": 0.28
+    }.get(profile, 0.40)
 
-    }.get(
-        profile,
-        0.40
-    )
-
-    battery_boost = min(
-        0.25,
-        battery / 30.0
-    )
+    battery_boost = min(0.25, battery / 30.0)
 
     self_consumption_pct = min(
         0.95,
@@ -171,8 +114,7 @@ def calculate_values(d):
 
     annual_saving = (
         self_used * price
-        +
-        export * export_price
+        + export * export_price
     )
 
     net_cost = max(
@@ -180,10 +122,7 @@ def calculate_values(d):
         cost - deduction
     )
 
-    # -----------------------------------------------------
-    # PROIEZIONE 25 ANNI
-    # -----------------------------------------------------
-
+    # Proiezione economica
     degradation = 0.005
     energy_price_growth = 0.02
 
@@ -193,9 +132,8 @@ def calculate_values(d):
 
     for y in range(1, 26):
 
-        production_y = (
-            production *
-            ((1 - degradation) ** (y - 1))
+        production_y = production * (
+            (1 - degradation) ** (y - 1)
         )
 
         self_used_y = min(
@@ -208,23 +146,18 @@ def calculate_values(d):
             production_y - self_used_y
         )
 
-        energy_price_y = (
-            price *
-            ((1 + energy_price_growth) ** (y - 1))
+        energy_price_y = price * (
+            (1 + energy_price_growth) ** (y - 1)
         )
 
         benefit = (
             self_used_y * energy_price_y
-            +
-            export_y * export_price
+            + export_y * export_price
         )
 
         cumulative_benefit += benefit
 
-        if (
-            payback is None
-            and cumulative_benefit >= net_cost
-        ):
+        if payback is None and cumulative_benefit >= net_cost:
             payback = y
 
         years.append({
@@ -237,11 +170,7 @@ def calculate_values(d):
             "energy_price": energy_price_y
         })
 
-    gross_25 = (
-        years[-1]["cumulative"]
-        if years
-        else 0
-    )
+    gross_25 = years[-1]["cumulative"]
 
     net_25 = max(
         0,
@@ -249,452 +178,709 @@ def calculate_values(d):
     )
 
     return {
-
         "self_used": self_used,
-
         "export": export,
-
         "grid_purchase": grid,
-
         "annual_saving": annual_saving,
-
         "net_cost": net_cost,
-
         "payback": payback,
-
         "years": years,
-
         "gross_25": gross_25,
-
         "net_25": net_25
-
     }
 
 
 @app.post("/api/calculate")
 def calculate():
-
-    d = request.get_json(
-        force=True
-    )
-
-    return jsonify(
-        calculate_values(d)
-    )
+    d = request.get_json(force=True)
+    return jsonify(calculate_values(d))
 
 
 # =========================================================
-# COLORI PDF
+# COLORI
 # =========================================================
 
 GREEN = colors.HexColor("#15803D")
-DARK_GREEN = colors.HexColor("#166534")
+DARK_GREEN = colors.HexColor("#14532D")
+MID_GREEN = colors.HexColor("#22C55E")
 LIGHT_GREEN = colors.HexColor("#DCFCE7")
 
 YELLOW = colors.HexColor("#FACC15")
 LIGHT_YELLOW = colors.HexColor("#FEF9C3")
 
-DARK = colors.HexColor("#1F2937")
-GREY = colors.HexColor("#6B7280")
-LIGHT_GREY = colors.HexColor("#F3F4F6")
-MID_GREY = colors.HexColor("#D1D5DB")
+DARK = colors.HexColor("#172033")
+GREY = colors.HexColor("#64748B")
+LIGHT_GREY = colors.HexColor("#F1F5F9")
+MID_GREY = colors.HexColor("#CBD5E1")
 
 WHITE = colors.white
 
 
 # =========================================================
-# FUNZIONI FORMATO
+# FUNZIONI GRAFICHE
 # =========================================================
 
-def euro(value):
+PAGE_W, PAGE_H = A4
 
-    return "€ {:,.0f}".format(
-        value
-    ).replace(",", ".")
+
+def euro(value):
+    return "€ " + f"{value:,.0f}".replace(",", ".")
 
 
 def number(value):
-
-    return "{:,.0f}".format(
-        value
-    ).replace(",", ".")
+    return f"{value:,.0f}".replace(",", ".")
 
 
-# =========================================================
-# HEADER / FOOTER
-# =========================================================
+def decimal(value):
+    return f"{value:.2f}".replace(".", ",")
 
-def draw_logo(canvas, doc):
 
-    width, height = A4
+def draw_round_rect(c, x, y, w, h, fill, stroke=None, radius=8):
+    c.setFillColor(fill)
 
-    canvas.saveState()
+    if stroke:
+        c.setStrokeColor(stroke)
+        c.setLineWidth(0.7)
+    else:
+        c.setStrokeColor(fill)
 
-    # Barra superiore
-    canvas.setFillColor(GREEN)
+    c.roundRect(
+        x,
+        y,
+        w,
+        h,
+        radius,
+        fill=1,
+        stroke=1 if stroke else 0
+    )
 
-    canvas.rect(
+
+def draw_header(c, title, subtitle=None):
+
+    c.setFillColor(GREEN)
+    c.rect(
         0,
-        height - 13 * mm,
-        width,
-        13 * mm,
+        PAGE_H - 22 * mm,
+        PAGE_W,
+        22 * mm,
         fill=1,
         stroke=0
     )
 
-    # Nome azienda
-    canvas.setFillColor(WHITE)
-
-    canvas.setFont(
-        "Helvetica-Bold",
-        14
-    )
-
-    canvas.drawString(
+    c.setFillColor(WHITE)
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(
         18 * mm,
-        height - 8.7 * mm,
-        "ENERGIA GIUSTA"
+        PAGE_H - 13 * mm,
+        title
     )
 
-    canvas.setFont(
-        "Helvetica",
-        7.5
+    if subtitle:
+        c.setFont("Helvetica", 8.5)
+        c.drawRightString(
+            PAGE_W - 18 * mm,
+            PAGE_H - 13 * mm,
+            subtitle
+        )
+
+
+def draw_footer(c, page_number):
+
+    c.setStrokeColor(MID_GREY)
+    c.setLineWidth(0.5)
+
+    c.line(
+        15 * mm,
+        12 * mm,
+        PAGE_W - 15 * mm,
+        12 * mm
     )
 
-    canvas.drawRightString(
-        width - 18 * mm,
-        height - 8.7 * mm,
-        "Partner ENI Plenitude"
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 7)
+
+    c.drawString(
+        15 * mm,
+        7 * mm,
+        "Energia Giusta • Partner ENI Plenitude"
     )
 
-    # Footer
-    canvas.setStrokeColor(MID_GREY)
-
-    canvas.line(
-        18 * mm,
-        14 * mm,
-        width - 18 * mm,
-        14 * mm
-    )
-
-    canvas.setFillColor(GREY)
-
-    canvas.setFont(
-        "Helvetica",
-        7
-    )
-
-    canvas.drawString(
-        18 * mm,
-        9 * mm,
-        "Analisi fotovoltaica - Stima commerciale"
-    )
-
-    canvas.drawRightString(
-        width - 18 * mm,
-        9 * mm,
-        f"Pagina {doc.page}"
-    )
-
-    canvas.restoreState()
-
-
-# =========================================================
-# STILI
-# =========================================================
-
-def title_style():
-
-    return ParagraphStyle(
-        "TitleCustom",
-        fontName="Helvetica-Bold",
-        fontSize=25,
-        leading=29,
-        textColor=DARK,
-        spaceAfter=8 * mm
+    c.drawRightString(
+        PAGE_W - 15 * mm,
+        7 * mm,
+        f"Pagina {page_number}"
     )
 
 
-def subtitle_style():
+def draw_sun(c, x, y, size=18):
 
-    return ParagraphStyle(
-        "SubtitleCustom",
-        fontName="Helvetica",
-        fontSize=11,
-        leading=15,
-        textColor=GREY,
-        spaceAfter=8 * mm
+    c.setStrokeColor(YELLOW)
+    c.setFillColor(YELLOW)
+    c.setLineWidth(2)
+
+    c.circle(
+        x,
+        y,
+        size * 0.28,
+        fill=1,
+        stroke=0
     )
 
+    for i in range(8):
 
-def section_style():
+        angle = math.radians(i * 45)
 
-    return ParagraphStyle(
-        "SectionCustom",
-        fontName="Helvetica-Bold",
-        fontSize=17,
-        leading=21,
-        textColor=DARK_GREEN,
-        spaceBefore=2 * mm,
-        spaceAfter=6 * mm
+        x1 = x + math.cos(angle) * size * 0.48
+        y1 = y + math.sin(angle) * size * 0.48
+
+        x2 = x + math.cos(angle) * size * 0.72
+        y2 = y + math.sin(angle) * size * 0.72
+
+        c.line(x1, y1, x2, y2)
+
+
+def draw_battery(c, x, y, w=30, h=48):
+
+    c.setStrokeColor(GREEN)
+    c.setLineWidth(2)
+
+    c.roundRect(
+        x,
+        y,
+        w,
+        h,
+        4,
+        fill=0,
+        stroke=1
     )
 
-
-def normal_style():
-
-    return ParagraphStyle(
-        "NormalCustom",
-        fontName="Helvetica",
-        fontSize=9.5,
-        leading=14,
-        textColor=DARK
+    c.rect(
+        x + w * 0.35,
+        y + h,
+        w * 0.30,
+        5,
+        fill=0,
+        stroke=1
     )
 
+    for i in range(3):
 
-def small_style():
+        c.setFillColor(
+            MID_GREEN if i < 2 else LIGHT_GREEN
+        )
 
-    return ParagraphStyle(
-        "SmallCustom",
-        fontName="Helvetica",
-        fontSize=8,
-        leading=11,
-        textColor=GREY
+        c.roundRect(
+            x + 5,
+            y + 7 + i * 12,
+            w - 10,
+            8,
+            2,
+            fill=1,
+            stroke=0
+        )
+
+
+def draw_house(c, x, y, w=55, h=40):
+
+    c.setFillColor(LIGHT_GREEN)
+    c.setStrokeColor(GREEN)
+    c.setLineWidth(1.5)
+
+    c.rect(
+        x,
+        y,
+        w,
+        h,
+        fill=1,
+        stroke=1
     )
 
-
-def centered_style():
-
-    return ParagraphStyle(
-        "CenteredCustom",
-        fontName="Helvetica",
-        fontSize=9,
-        leading=13,
-        alignment=TA_CENTER,
-        textColor=DARK
-    )
-
-
-# =========================================================
-# KPI
-# =========================================================
-
-def kpi_box(label, value):
-
-    data = [
-
-        [
-            Paragraph(
-                label,
-                ParagraphStyle(
-                    "KPILabel",
-                    fontName="Helvetica",
-                    fontSize=8,
-                    textColor=GREY,
-                    alignment=TA_CENTER
-                )
-            )
-        ],
-
-        [
-            Paragraph(
-                value,
-                ParagraphStyle(
-                    "KPIValue",
-                    fontName="Helvetica-Bold",
-                    fontSize=15,
-                    textColor=DARK_GREEN,
-                    alignment=TA_CENTER
-                )
-            )
-        ]
-
+    roof = [
+        x - 5,
+        y + h,
+        x + w / 2,
+        y + h + 30,
+        x + w + 5,
+        y + h
     ]
 
-    table = Table(
-        data,
-        colWidths=[43 * mm],
-        rowHeights=[10 * mm, 15 * mm]
+    path = c.beginPath()
+    path.moveTo(roof[0], roof[1])
+    path.lineTo(roof[2], roof[3])
+    path.lineTo(roof[4], roof[5])
+    path.close()
+
+    c.setFillColor(GREEN)
+    c.drawPath(path, fill=1, stroke=0)
+
+    c.setFillColor(WHITE)
+    c.rect(
+        x + w * 0.42,
+        y,
+        w * 0.18,
+        h * 0.55,
+        fill=1,
+        stroke=0
     )
 
-    table.setStyle(
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                colors.white
-            ),
-
-            (
-                "BOX",
-                (0, 0),
-                (-1, -1),
-                0.8,
-                MID_GREY
-            ),
-
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                4
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                4
-            )
-
-        ])
+    # pannelli
+    c.setFillColor(DARK)
+    c.rect(
+        x + 8,
+        y + h + 4,
+        w * 0.68,
+        13,
+        fill=1,
+        stroke=0
     )
 
-    return table
+    c.setStrokeColor(WHITE)
+    c.setLineWidth(0.5)
+
+    for i in range(1, 4):
+        px = x + 8 + i * (w * 0.68 / 4)
+        c.line(
+            px,
+            y + h + 4,
+            px,
+            y + h + 17
+        )
 
 
-# =========================================================
-# GRAFICO PRODUZIONE MENSILE
-# =========================================================
+def draw_lightning(c, x, y, size=28):
 
-def make_monthly_chart(monthly):
+    path = c.beginPath()
 
-    drawing = Drawing(
-        175 * mm,
-        82 * mm
+    path.moveTo(
+        x + size * 0.20,
+        y + size
     )
 
-    chart = VerticalBarChart()
+    path.lineTo(
+        x + size * 0.72,
+        y + size
+    )
 
-    chart.x = 10 * mm
-    chart.y = 13 * mm
+    path.lineTo(
+        x + size * 0.45,
+        y + size * 0.55
+    )
 
-    chart.height = 55 * mm
-    chart.width = 150 * mm
+    path.lineTo(
+        x + size * 0.85,
+        y + size * 0.55
+    )
 
-    chart.data = [
-        monthly
+    path.lineTo(
+        x + size * 0.15,
+        y
+    )
+
+    path.lineTo(
+        x + size * 0.38,
+        y + size * 0.45
+    )
+
+    path.lineTo(
+        x,
+        y + size * 0.45
+    )
+
+    path.close()
+
+    c.setFillColor(YELLOW)
+    c.drawPath(path, fill=1, stroke=0)
+
+
+def draw_euro(c, x, y, size=24):
+
+    c.setFillColor(GREEN)
+    c.circle(
+        x,
+        y,
+        size / 2,
+        fill=1,
+        stroke=0
+    )
+
+    c.setFillColor(WHITE)
+    c.setFont("Helvetica-Bold", size * 0.75)
+
+    c.drawCentredString(
+        x,
+        y - size * 0.25,
+        "€"
+    )
+
+
+def draw_chart_monthly(c, x, y, w, h, monthly):
+
+    if not monthly:
+        return
+
+    max_value = max(monthly)
+    max_value = max(max_value, 1)
+
+    left = x + 14
+    bottom = y + 22
+    chart_w = w - 25
+    chart_h = h - 35
+
+    # area
+    c.setFillColor(LIGHT_GREY)
+    c.roundRect(
+        x,
+        y,
+        w,
+        h,
+        8,
+        fill=1,
+        stroke=0
+    )
+
+    # titolo
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(
+        x + 12,
+        y + h - 17,
+        "Produzione fotovoltaica mensile"
+    )
+
+    # griglia
+    c.setStrokeColor(MID_GREY)
+    c.setLineWidth(0.4)
+
+    for i in range(5):
+
+        gy = bottom + chart_h * i / 4
+
+        c.line(
+            left,
+            gy,
+            left + chart_w,
+            gy
+        )
+
+    bar_w = chart_w / 12 * 0.62
+
+    months = [
+        "Gen", "Feb", "Mar", "Apr",
+        "Mag", "Giu", "Lug", "Ago",
+        "Set", "Ott", "Nov", "Dic"
     ]
 
-    chart.categoryAxis.categoryNames = [
+    for i, value in enumerate(monthly):
 
-        "Gen",
-        "Feb",
-        "Mar",
-        "Apr",
-        "Mag",
-        "Giu",
-        "Lug",
-        "Ago",
-        "Set",
-        "Ott",
-        "Nov",
-        "Dic"
+        bx = left + i * chart_w / 12 + (
+            chart_w / 12 - bar_w
+        ) / 2
 
-    ]
+        bh = chart_h * value / max_value
 
-    chart.valueAxis.valueMin = 0
+        c.setFillColor(GREEN)
 
-    maximum = max(
-        monthly
-    ) if monthly else 1000
+        c.roundRect(
+            bx,
+            bottom,
+            bar_w,
+            bh,
+            2,
+            fill=1,
+            stroke=0
+        )
 
-    chart.valueAxis.valueMax = (
-        math.ceil(
-            maximum / 500
-        ) * 500
+        c.setFillColor(GREY)
+        c.setFont("Helvetica", 6.5)
+
+        c.drawCentredString(
+            bx + bar_w / 2,
+            bottom - 10,
+            months[i]
+        )
+
+
+def draw_donut(c, cx, cy, radius, self_used, export):
+
+    total = max(
+        self_used + export,
+        1
     )
 
-    chart.valueAxis.valueStep = (
-        chart.valueAxis.valueMax / 5
+    self_angle = 360 * self_used / total
+
+    c.setFillColor(GREEN)
+
+    c.wedge(
+        cx - radius,
+        cy - radius,
+        cx + radius,
+        cy + radius,
+        0,
+        self_angle,
+        fill=1,
+        stroke=0
     )
 
-    chart.bars[0].fillColor = GREEN
-    chart.bars[0].strokeColor = GREEN
+    c.setFillColor(YELLOW)
 
-    chart.categoryAxis.labels.fontName = "Helvetica"
-    chart.categoryAxis.labels.fontSize = 7
-
-    chart.valueAxis.labels.fontName = "Helvetica"
-    chart.valueAxis.labels.fontSize = 7
-
-    chart.categoryAxis.strokeColor = MID_GREY
-    chart.valueAxis.strokeColor = MID_GREY
-
-    drawing.add(chart)
-
-    return drawing
-
-
-# =========================================================
-# GRAFICO ECONOMICO
-# =========================================================
-
-def make_economic_chart(years):
-
-    drawing = Drawing(
-        175 * mm,
-        80 * mm
+    c.wedge(
+        cx - radius,
+        cy - radius,
+        cx + radius,
+        cy + radius,
+        self_angle,
+        360 - self_angle,
+        fill=1,
+        stroke=0
     )
 
-    chart = VerticalBarChart()
+    # centro bianco
+    c.setFillColor(WHITE)
 
-    chart.x = 10 * mm
-    chart.y = 13 * mm
+    c.circle(
+        cx,
+        cy,
+        radius * 0.55,
+        fill=1,
+        stroke=0
+    )
 
-    chart.height = 52 * mm
-    chart.width = 150 * mm
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 12)
 
-    chart.data = [[
+    c.drawCentredString(
+        cx,
+        cy + 2,
+        f"{self_used / total * 100:.0f}%"
+    )
+
+    c.setFont("Helvetica", 7)
+
+    c.drawCentredString(
+        cx,
+        cy - 8,
+        "autoconsumo"
+    )
+
+
+def draw_economic_chart(c, x, y, w, h, years):
+
+    if not years:
+        return
+
+    values = [
         item["cumulative"]
         for item in years
-    ]]
-
-    chart.categoryAxis.categoryNames = [
-        str(item["year"])
-        for item in years
     ]
 
-    maximum = max(
-        item["cumulative"]
-        for item in years
-    ) if years else 1000
+    max_value = max(values)
+    max_value = max(max_value, 1)
 
-    chart.valueAxis.valueMin = 0
+    left = x + 30
+    bottom = y + 25
+    chart_w = w - 42
+    chart_h = h - 42
 
-    chart.valueAxis.valueMax = (
-        math.ceil(maximum / 5000) * 5000
-        if maximum > 0
-        else 5000
+    c.setFillColor(LIGHT_GREY)
+
+    c.roundRect(
+        x,
+        y,
+        w,
+        h,
+        8,
+        fill=1,
+        stroke=0
     )
 
-    chart.valueAxis.valueStep = (
-        chart.valueAxis.valueMax / 5
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 10)
+
+    c.drawString(
+        x + 12,
+        y + h - 17,
+        "Crescita del beneficio cumulato"
     )
 
-    chart.bars[0].fillColor = GREEN
-    chart.bars[0].strokeColor = GREEN
+    # griglia
+    c.setStrokeColor(MID_GREY)
+    c.setLineWidth(0.4)
 
-    chart.categoryAxis.labels.fontName = "Helvetica"
-    chart.categoryAxis.labels.fontSize = 6
+    for i in range(5):
 
-    chart.valueAxis.labels.fontName = "Helvetica"
-    chart.valueAxis.labels.fontSize = 7
+        gy = bottom + chart_h * i / 4
 
-    chart.categoryAxis.strokeColor = MID_GREY
-    chart.valueAxis.strokeColor = MID_GREY
+        c.line(
+            left,
+            gy,
+            left + chart_w,
+            gy
+        )
 
-    drawing.add(chart)
+    # linea
+    c.setStrokeColor(GREEN)
+    c.setLineWidth(2.2)
 
-    return drawing
+    previous = None
+
+    for i, value in enumerate(values):
+
+        px = left + chart_w * i / 24
+        py = bottom + chart_h * value / max_value
+
+        if previous:
+            c.line(
+                previous[0],
+                previous[1],
+                px,
+                py
+            )
+
+        previous = (px, py)
+
+        if i in [0, 4, 9, 14, 19, 24]:
+
+            c.setFillColor(GREEN)
+
+            c.circle(
+                px,
+                py,
+                3,
+                fill=1,
+                stroke=0
+            )
+
+            c.setFillColor(GREY)
+            c.setFont("Helvetica", 6.5)
+
+            c.drawCentredString(
+                px,
+                bottom - 11,
+                str(i + 1)
+            )
+
+    # asse
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 6)
+
+    c.drawString(
+        left,
+        bottom - 21,
+        "Anno"
+    )
+
+    c.drawRightString(
+        left + chart_w,
+        bottom - 21,
+        "25"
+    )
+
+
+def draw_kpi(c, x, y, w, h, icon, label, value, accent):
+
+    draw_round_rect(
+        c,
+        x,
+        y,
+        w,
+        h,
+        WHITE,
+        MID_GREY,
+        8
+    )
+
+    c.setFillColor(accent)
+    c.circle(
+        x + 18,
+        y + h - 20,
+        11,
+        fill=1,
+        stroke=0
+    )
+
+    c.setFillColor(WHITE)
+    c.setFont("Helvetica-Bold", 10)
+
+    c.drawCentredString(
+        x + 18,
+        y + h - 23,
+        icon
+    )
+
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 7.5)
+
+    c.drawString(
+        x + 35,
+        y + h - 17,
+        label
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 17)
+
+    c.drawString(
+        x + 35,
+        y + 14,
+        value
+    )
+
+
+def draw_section_title(c, x, y, title, subtitle=None):
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 17)
+
+    c.drawString(
+        x,
+        y,
+        title
+    )
+
+    if subtitle:
+
+        c.setFillColor(GREY)
+        c.setFont("Helvetica", 8.5)
+
+        c.drawString(
+            x,
+            y - 14,
+            subtitle
+        )
+
+
+def draw_bullet(c, x, y, title, text):
+
+    c.setFillColor(GREEN)
+
+    c.circle(
+        x,
+        y + 3,
+        4,
+        fill=1,
+        stroke=0
+    )
+
+    c.setFillColor(DARK)
+
+    c.setFont("Helvetica-Bold", 9)
+
+    c.drawString(
+        x + 12,
+        y,
+        title
+    )
+
+    c.setFillColor(GREY)
+
+    c.setFont("Helvetica", 7.5)
+
+    c.drawString(
+        x + 12,
+        y - 11,
+        text
+    )
 
 
 # =========================================================
@@ -704,126 +890,65 @@ def make_economic_chart(years):
 @app.post("/api/pdf")
 def generate_pdf():
 
-    d = request.get_json(
-        force=True
-    )
+    d = request.get_json(force=True)
 
-    result = calculate_values(d)
+    values = calculate_values(d)
 
     address = d.get(
         "address",
-        ""
+        "Abitazione"
     )
 
-    lat = d.get(
-        "lat",
-        ""
-    )
-
-    lon = d.get(
-        "lon",
-        ""
-    )
-
-    kwp = float(
-        d.get(
-            "kwp",
-            0
-        )
-    )
-
-    battery = float(
-        d.get(
-            "battery",
-            0
-        )
-    )
-
-    angle = float(
-        d.get(
-            "angle",
-            30
-        )
-    )
-
-    aspect = d.get(
-        "aspect",
-        "0"
-    )
-
-    loss = float(
-        d.get(
-            "loss",
-            14
-        )
-    )
+    kwp = float(d.get("kwp", 0))
+    battery = float(d.get("battery", 0))
+    angle = float(d.get("angle", 30))
+    aspect = float(d.get("aspect", 0))
+    loss = float(d.get("loss", 14))
 
     consumption = float(
-        d.get(
-            "consumption",
-            0
-        )
+        d.get("consumption", 0)
     )
+
+    production = float(
+        d.get("production", 0)
+    )
+
+    cost = float(
+        d.get("cost", 0)
+    )
+
+    deduction = float(
+        d.get("deduction", 0)
+    )
+
+    energy_price = float(
+        d.get("energy_price", 0.25)
+    )
+
+    export_price = float(
+        d.get("export_price", 0.10)
+    )
+
+    monthly = d.get(
+        "monthly",
+        []
+    )
+
+    if not monthly:
+        monthly = [
+            production / 12
+            for _ in range(12)
+        ]
 
     profile = d.get(
         "profile",
         "equilibrato"
     )
 
-    cost = float(
-        d.get(
-            "cost",
-            0
-        )
-    )
-
-    deduction = float(
-        d.get(
-            "deduction",
-            0
-        )
-    )
-
-    energy_price = float(
-        d.get(
-            "energy_price",
-            0.25
-        )
-    )
-
-    export_price = float(
-        d.get(
-            "export_price",
-            0.10
-        )
-    )
-
-    production = float(
-        d.get(
-            "production",
-            0
-        )
-    )
-
-    monthly = d.get(
-        "monthly_production",
-        []
-    )
-
-    if not monthly:
-        monthly = [0] * 12
-
     profile_labels = {
-
-        "giorno":
-            "Prevalentemente giorno",
-
-        "equilibrato":
-            "Equilibrato",
-
-        "sera":
-            "Prevalentemente sera/notte"
-
+        "giorno": "Prevalenza diurna",
+        "equilibrato": "Equilibrato",
+        "sera": "Prevalenza serale"
     }
 
     profile_label = profile_labels.get(
@@ -831,1781 +956,1094 @@ def generate_pdf():
         "Equilibrato"
     )
 
-    aspect_labels = {
-
-        "-90":
-            "Est",
-
-        "0":
-            "Sud",
-
-        "90":
-            "Ovest"
-
-    }
-
-    aspect_label = aspect_labels.get(
-        str(aspect),
-        "Personalizzato"
-    )
-
-    today = datetime.now().strftime(
-        "%d/%m/%Y"
-    )
-
-    gross_25 = result[
-        "gross_25"
-    ]
-
-    net_25 = result[
-        "net_25"
-    ]
-
-    payback = result[
-        "payback"
-    ]
-
-    payback_text = (
-        f"{payback},0 anni"
-        if payback
-        else "Non raggiunto"
-    )
+    # -----------------------------------------------------
+    # PDF
+    # -----------------------------------------------------
 
     buffer = io.BytesIO()
 
-    doc = SimpleDocTemplate(
-
+    c = canvas.Canvas(
         buffer,
-
-        pagesize=A4,
-
-        rightMargin=18 * mm,
-
-        leftMargin=18 * mm,
-
-        topMargin=23 * mm,
-
-        bottomMargin=20 * mm,
-
-        title="Analisi Fotovoltaica",
-
-        author="Energia Giusta"
-
+        pagesize=A4
     )
 
-    story = []
-
+    c.setTitle(
+        "Analisi Fotovoltaica - Energia Giusta"
+    )
 
     # =====================================================
     # PAGINA 1 - COPERTINA
     # =====================================================
 
-    story.append(
-        Spacer(
-            1,
-            18 * mm
-        )
+    c.setFillColor(LIGHT_GREY)
+    c.rect(
+        0,
+        0,
+        PAGE_W,
+        PAGE_H,
+        fill=1,
+        stroke=0
     )
 
-    story.append(
-        Paragraph(
-            "ANALISI<br/>FOTOVOLTAICA",
-            title_style()
-        )
+    # fascia verde
+    c.setFillColor(GREEN)
+    c.rect(
+        0,
+        PAGE_H - 85 * mm,
+        PAGE_W,
+        85 * mm,
+        fill=1,
+        stroke=0
     )
 
-    story.append(
-        Paragraph(
-            "Analisi energetica ed economica dell'impianto",
-            subtitle_style()
-        )
+    # marchio testuale
+    c.setFillColor(WHITE)
+    c.setFont("Helvetica-Bold", 25)
+
+    c.drawString(
+        20 * mm,
+        PAGE_H - 30 * mm,
+        "ENERGIA GIUSTA"
     )
 
-    cover_data = [
+    c.setFont("Helvetica", 9)
 
-        [
-            Paragraph(
-                "<b>CLIENTE / INDIRIZZO</b>",
-                small_style()
-            ),
-
-            Paragraph(
-                "<b>DATA ANALISI</b>",
-                small_style()
-            )
-        ],
-
-        [
-
-            Paragraph(
-                address
-                if address
-                else "Indirizzo non specificato",
-
-                ParagraphStyle(
-                    "CoverAddress",
-                    fontName="Helvetica-Bold",
-                    fontSize=13,
-                    leading=17,
-                    textColor=DARK
-                )
-            ),
-
-            Paragraph(
-                today,
-
-                ParagraphStyle(
-                    "CoverDate",
-                    fontName="Helvetica-Bold",
-                    fontSize=13,
-                    textColor=DARK
-                )
-            )
-
-        ]
-
-    ]
-
-    cover_table = Table(
-
-        cover_data,
-
-        colWidths=[
-            125 * mm,
-            35 * mm
-        ]
-
+    c.drawString(
+        20 * mm,
+        PAGE_H - 39 * mm,
+        "Partner ENI Plenitude"
     )
 
-    cover_table.setStyle(
+    # titolo
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 28)
 
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_GREY
-            ),
-
-            (
-                "BOX",
-                (0, 0),
-                (-1, -1),
-                0.8,
-                MID_GREY
-            ),
-
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                6 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                6 * mm
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            )
-
-        ])
-
+    c.drawString(
+        20 * mm,
+        PAGE_H - 115 * mm,
+        "Analisi Fotovoltaica"
     )
 
-    story.append(
-        cover_table
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 11)
+
+    c.drawString(
+        20 * mm,
+        PAGE_H - 126 * mm,
+        "Analisi energetica ed economica del tuo impianto"
     )
 
-    story.append(
-        Spacer(
-            1,
-            18 * mm
-        )
-    )
-
-    intro_box = Table(
-
-        [[
-
-            Paragraph(
-                "<b>OBIETTIVO DELL'ANALISI</b><br/><br/>"
-                "Questa analisi stima la produzione energetica "
-                "dell'impianto fotovoltaico e il relativo beneficio "
-                "economico sulla base dei dati inseriti e della "
-                "simulazione PVGIS.",
-                normal_style()
-            )
-
-        ]],
-
-        colWidths=[
-            160 * mm
-        ]
-
-    )
-
-    intro_box.setStyle(
-
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_GREEN
-            ),
-
-            (
-                "BOX",
-                (0, 0),
-                (-1, -1),
-                1,
-                GREEN
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                8 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                8 * mm
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                7 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                7 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        intro_box
-    )
-
-    story.append(
-        Spacer(
-            1,
-            35 * mm
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "Energia Giusta",
-
-            ParagraphStyle(
-                "BrandBig",
-                fontName="Helvetica-Bold",
-                fontSize=18,
-                textColor=GREEN,
-                alignment=TA_CENTER
-            )
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "Consulenza energetica e soluzioni per l'efficienza",
-
-            ParagraphStyle(
-                "BrandSub",
-                fontName="Helvetica",
-                fontSize=9,
-                textColor=GREY,
-                alignment=TA_CENTER
-            )
-        )
-    )
-
-    story.append(
-        PageBreak()
-    )
-
-
-    # =====================================================
-    # PAGINA 2 - PRODUZIONE E RISPARMIO
-    # =====================================================
-
-    story.append(
-        Paragraph(
-            "Produzione e Risparmio",
-            section_style()
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "La produzione è stimata tramite PVGIS 5.3 "
-            "sulla base della posizione geografica e dei "
-            "parametri tecnici dell'impianto.",
-            normal_style()
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            5 * mm
-        )
-    )
-
-    kpi_table = Table(
-
-        [[
-
-            kpi_box(
-                "PRODUZIONE ANNUA",
-                number(production) + " kWh"
-            ),
-
-            kpi_box(
-                "AUTOCONSUMO",
-                number(result["self_used"]) + " kWh"
-            ),
-
-            kpi_box(
-                "ENERGIA IMMESSA",
-                number(result["export"]) + " kWh"
-            ),
-
-            kpi_box(
-                "RISPARMIO ANNUO",
-                euro(result["annual_saving"])
-            )
-
-        ]],
-
-        colWidths=[
-            43 * mm,
-            43 * mm,
-            43 * mm,
-            43 * mm
-        ]
-
-    )
-
-    kpi_table.setStyle(
-
-        TableStyle([
-
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                1.5 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                1.5 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        kpi_table
-    )
-
-    story.append(
-        Spacer(
-            1,
-            8 * mm
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "Produzione energetica stimata",
-
-            ParagraphStyle(
-                "ChartTitle",
-                fontName="Helvetica-Bold",
-                fontSize=12,
-                textColor=DARK
-            )
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            3 * mm
-        )
-    )
-
-    story.append(
-        make_monthly_chart(
-            monthly
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            5 * mm
-        )
-    )
-
-    technical_data = [
-
-        [
-            "Potenza impianto",
-            f"{kwp:.2f} kWp",
-
-            "Batteria",
-            f"{battery:.1f} kWh"
-        ],
-
-        [
-            "Inclinazione",
-            f"{angle:.0f}°",
-
-            "Orientamento",
-            aspect_label
-        ],
-
-        [
-            "Perdite sistema",
-            f"{loss:.1f}%",
-
-            "Consumo annuo",
-            f"{number(consumption)} kWh"
-        ]
-
-    ]
-
-    technical_table = Table(
-
-        technical_data,
-
-        colWidths=[
-            38 * mm,
-            42 * mm,
-            38 * mm,
-            42 * mm
-        ]
-
-    )
-
-    technical_table.setStyle(
-
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_GREY
-            ),
-
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                MID_GREY
-            ),
-
-            (
-                "FONTNAME",
-                (0, 0),
-                (-1, -1),
-                "Helvetica"
-            ),
-
-            (
-                "FONTNAME",
-                (0, 0),
-                (0, -1),
-                "Helvetica-Bold"
-            ),
-
-            (
-                "FONTNAME",
-                (2, 0),
-                (2, -1),
-                "Helvetica-Bold"
-            ),
-
-            (
-                "FONTSIZE",
-                (0, 0),
-                (-1, -1),
-                8
-            ),
-
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                4
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            )
-
-        ])
-
-    )
-
-    story.append(
-        technical_table
-    )
-
-    story.append(
-        PageBreak()
-    )
-
-
-    # =====================================================
-    # PAGINA 3 - ANALISI ECONOMICA
-    # =====================================================
-
-    story.append(
-        Paragraph(
-            "Analisi Economica",
-            section_style()
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "Sintesi economica dell'investimento sulla base "
-            "dei parametri inseriti nella simulazione.",
-            normal_style()
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            8 * mm
-        )
-    )
-
-    economic_kpis = Table(
-
-        [[
-
-            kpi_box(
-                "INVESTIMENTO",
-                euro(cost)
-            ),
-
-            kpi_box(
-                "DETRAZIONE",
-                euro(deduction)
-            ),
-
-            kpi_box(
-                "INVESTIMENTO NETTO",
-                euro(result["net_cost"])
-            )
-
-        ]],
-
-        colWidths=[
-            53 * mm,
-            53 * mm,
-            53 * mm
-        ]
-
-    )
-
-    economic_kpis.setStyle(
-
-        TableStyle([
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                2 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                2 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        economic_kpis
-    )
-
-    story.append(
-        Spacer(
-            1,
-            10 * mm
-        )
-    )
-
-    payback_box = Table(
-
-        [[
-
-            Paragraph(
-                "TEMPO DI RIENTRO STIMATO",
-
-                ParagraphStyle(
-                    "PaybackLabel",
-                    fontName="Helvetica-Bold",
-                    fontSize=9,
-                    textColor=DARK_GREEN,
-                    alignment=TA_CENTER
-                )
-            )
-
-        ], [
-
-            Paragraph(
-                payback_text,
-
-                ParagraphStyle(
-                    "PaybackValue",
-                    fontName="Helvetica-Bold",
-                    fontSize=27,
-                    textColor=DARK,
-                    alignment=TA_CENTER
-                )
-            )
-
-        ]],
-
-        colWidths=[
-            160 * mm
-        ]
-
-    )
-
-    payback_box.setStyle(
-
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_YELLOW
-            ),
-
-            (
-                "BOX",
-                (0, 0),
-                (-1, -1),
-                1,
-                YELLOW
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                6 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                6 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        payback_box
-    )
-
-    story.append(
-        Spacer(
-            1,
-            10 * mm
-        )
-    )
-
-    long_term = Table(
-
-        [[
-
-            Paragraph(
-                "BENEFICIO CUMULATO LORDO A 25 ANNI",
-                centered_style()
-            ),
-
-            Paragraph(
-                "BENEFICIO NETTO A 25 ANNI",
-                centered_style()
-            )
-
-        ], [
-
-            Paragraph(
-                euro(gross_25),
-
-                ParagraphStyle(
-                    "LongValue1",
-                    fontName="Helvetica-Bold",
-                    fontSize=18,
-                    textColor=DARK_GREEN,
-                    alignment=TA_CENTER
-                )
-            ),
-
-            Paragraph(
-                euro(net_25),
-
-                ParagraphStyle(
-                    "LongValue2",
-                    fontName="Helvetica-Bold",
-                    fontSize=18,
-                    textColor=DARK_GREEN,
-                    alignment=TA_CENTER
-                )
-            )
-
-        ]],
-
-        colWidths=[
-            80 * mm,
-            80 * mm
-        ]
-
-    )
-
-    long_term.setStyle(
-
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_GREEN
-            ),
-
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                colors.white
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        long_term
-    )
-
-    story.append(
-        Spacer(
-            1,
-            12 * mm
-        )
-    )
-
-    explanation = Table(
-
-        [[
-
-            Paragraph(
-                "<b>Come leggere il risultato</b><br/><br/>"
-                "L'investimento netto considera il costo dell'impianto "
-                "al netto della detrazione indicata. Il beneficio "
-                "economico considera l'energia autoconsumata e il "
-                "valore attribuito all'energia immessa.",
-                normal_style()
-            )
-
-        ]],
-
-        colWidths=[
-            160 * mm
-        ]
-
-    )
-
-    explanation.setStyle(
-
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_GREY
-            ),
-
-            (
-                "BOX",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                MID_GREY
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                7 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                7 * mm
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        explanation
-    )
-
-    story.append(
-        PageBreak()
-    )
-
-
-    # =====================================================
-    # PAGINA 4 - PROIEZIONE 25 ANNI
-    # =====================================================
-
-    story.append(
-        Paragraph(
-            "Proiezione Economica a 25 Anni",
-            section_style()
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "Stima dell'evoluzione del beneficio economico "
-            "nel tempo, considerando un degrado della produzione "
-            "dello 0,5% annuo e una crescita del prezzo dell'energia "
-            "acquistata del 2% annuo.",
-            normal_style()
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            5 * mm
-        )
-    )
-
-    story.append(
-        make_economic_chart(
-            result["years"]
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            3 * mm
-        )
-    )
-
-    milestones = [
-        1,
-        5,
-        10,
-        15,
-        20,
+    # illustrazione
+    draw_sun(
+        c,
+        PAGE_W - 48 * mm,
+        PAGE_H - 104 * mm,
         25
-    ]
-
-    projection_rows = [
-
-        [
-            "Periodo",
-            "Beneficio annuo",
-            "Beneficio cumulato"
-        ]
-
-    ]
-
-    for year in milestones:
-
-        item = next(
-
-            (
-                x
-                for x in result["years"]
-                if x["year"] == year
-            ),
-
-            None
-
-        )
-
-        if item:
-
-            projection_rows.append([
-
-                f"{year}° anno",
-
-                euro(
-                    item["benefit"]
-                ),
-
-                euro(
-                    item["cumulative"]
-                )
-
-            ])
-
-    projection_table = Table(
-
-        projection_rows,
-
-        colWidths=[
-            42 * mm,
-            55 * mm,
-            63 * mm
-        ]
-
     )
 
-    projection_table.setStyle(
-
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, 0),
-                GREEN
-            ),
-
-            (
-                "TEXTCOLOR",
-                (0, 0),
-                (-1, 0),
-                WHITE
-            ),
-
-            (
-                "FONTNAME",
-                (0, 0),
-                (-1, 0),
-                "Helvetica-Bold"
-            ),
-
-            (
-                "FONTNAME",
-                (0, 1),
-                (0, -1),
-                "Helvetica-Bold"
-            ),
-
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                MID_GREY
-            ),
-
-            (
-                "BACKGROUND",
-                (0, 1),
-                (-1, -1),
-                colors.white
-            ),
-
-            (
-                "ALIGN",
-                (1, 1),
-                (-1, -1),
-                "RIGHT"
-            ),
-
-            (
-                "FONTSIZE",
-                (0, 0),
-                (-1, -1),
-                8.5
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            )
-
-        ])
-
+    draw_house(
+        c,
+        PAGE_W - 105 * mm,
+        PAGE_H - 177 * mm,
+        62,
+        43
     )
 
-    story.append(
-        projection_table
+    draw_battery(
+        c,
+        PAGE_W - 38 * mm,
+        PAGE_H - 170 * mm,
+        25,
+        45
     )
 
-    story.append(
-        Spacer(
-            1,
-            7 * mm
-        )
+    # indirizzo
+    draw_round_rect(
+        c,
+        20 * mm,
+        66 * mm,
+        PAGE_W - 40 * mm,
+        27 * mm,
+        WHITE,
+        MID_GREY,
+        8
     )
 
-    assumptions = Table(
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 8)
 
-        [[
-
-            Paragraph(
-                "<b>PARAMETRI DELLA SIMULAZIONE</b><br/><br/>"
-                "Degrado produzione: 0,5% annuo<br/>"
-                "Crescita prezzo energia acquistata: 2% annuo<br/>"
-                f"Prezzo energia acquistata: {energy_price:.2f} €/kWh<br/>"
-                f"Valore energia immessa: {export_price:.2f} €/kWh<br/>"
-                f"Profilo consumi: {profile_label}",
-                normal_style()
-            )
-
-        ]],
-
-        colWidths=[
-            160 * mm
-        ]
-
+    c.drawString(
+        28 * mm,
+        82 * mm,
+        "ABITAZIONE ANALIZZATA"
     )
 
-    assumptions.setStyle(
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 12)
 
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_GREY
-            ),
-
-            (
-                "BOX",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                MID_GREY
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                7 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                7 * mm
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            )
-
-        ])
-
+    c.drawString(
+        28 * mm,
+        72 * mm,
+        address
     )
 
-    story.append(
-        assumptions
+    # tre indicatori
+    box_y = 32 * mm
+    box_w = 50 * mm
+
+    draw_kpi(
+        c,
+        20 * mm,
+        box_y,
+        box_w,
+        23 * mm,
+        "S",
+        "Potenza FV",
+        f"{decimal(kwp)} kWp",
+        GREEN
     )
 
-    story.append(
-        Spacer(
-            1,
-            7 * mm
-        )
+    draw_kpi(
+        c,
+        77 * mm,
+        box_y,
+        box_w,
+        23 * mm,
+        "B",
+        "Accumulo",
+        f"{decimal(battery)} kWh",
+        YELLOW
     )
 
-    story.append(
-        Paragraph(
-            "Nota: la proiezione rappresenta una simulazione "
-            "commerciale e non costituisce una garanzia dei "
-            "risultati economici futuri.",
-            small_style()
-        )
+    draw_kpi(
+        c,
+        134 * mm,
+        box_y,
+        box_w,
+        23 * mm,
+        "€",
+        "Risparmio annuo",
+        euro(values["annual_saving"]),
+        GREEN
     )
 
-    story.append(
-        PageBreak()
-    )
+    draw_footer(c, 1)
 
+    c.showPage()
 
     # =====================================================
-    # PAGINA 5 - COSA INCLUDE L'OFFERTA
+    # PAGINA 2 - IL TUO IMPIANTO
     # =====================================================
 
-    story.append(
-        Paragraph(
-            "Cosa Include l'Offerta",
-            section_style()
-        )
+    draw_header(
+        c,
+        "Il tuo impianto",
+        "Dati tecnici e produzione"
     )
 
-    story.append(
-        Paragraph(
-            "Un servizio completo dalla progettazione alla gestione "
-            "dell'impianto nel tempo.",
-            normal_style()
-        )
+    draw_section_title(
+        c,
+        18 * mm,
+        PAGE_H - 38 * mm,
+        "Configurazione del sistema",
+        "I principali parametri utilizzati per la simulazione"
     )
 
-    story.append(
-        Spacer(
-            1,
-            8 * mm
+    # schede tecniche
+    cards = [
+        ("Potenza fotovoltaica", f"{decimal(kwp)} kWp"),
+        ("Batteria di accumulo", f"{decimal(battery)} kWh"),
+        ("Consumo annuo", f"{number(consumption)} kWh"),
+        ("Produzione stimata", f"{number(production)} kWh"),
+        ("Inclinazione", f"{decimal(angle)}°"),
+        ("Perdite sistema", f"{decimal(loss)}%"),
+    ]
+
+    start_x = 18 * mm
+    start_y = PAGE_H - 70 * mm
+
+    card_w = 55 * mm
+    card_h = 23 * mm
+    gap_x = 5 * mm
+    gap_y = 5 * mm
+
+    for i, (label, value) in enumerate(cards):
+
+        col = i % 3
+        row = i // 3
+
+        x = start_x + col * (card_w + gap_x)
+        y = start_y - row * (card_h + gap_y)
+
+        draw_round_rect(
+            c,
+            x,
+            y,
+            card_w,
+            card_h,
+            WHITE,
+            MID_GREY,
+            7
         )
+
+        c.setFillColor(GREY)
+        c.setFont("Helvetica", 7)
+
+        c.drawString(
+            x + 6 * mm,
+            y + 14 * mm,
+            label
+        )
+
+        c.setFillColor(DARK)
+        c.setFont("Helvetica-Bold", 13)
+
+        c.drawString(
+            x + 6 * mm,
+            y + 5 * mm,
+            value
+        )
+
+    # grafico
+    draw_chart_monthly(
+        c,
+        18 * mm,
+        63 * mm,
+        PAGE_W - 36 * mm,
+        82 * mm,
+        monthly
+    )
+
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 7.5)
+
+    c.drawString(
+        18 * mm,
+        53 * mm,
+        "Produzione annuale stimata da PVGIS sulla base dei dati di localizzazione e configurazione inseriti."
+    )
+
+    draw_footer(c, 2)
+
+    c.showPage()
+
+    # =====================================================
+    # PAGINA 3 - AUTOCONSUMO
+    # =====================================================
+
+    draw_header(
+        c,
+        "Come utilizzi la tua energia",
+        "Autoconsumo e immissione"
+    )
+
+    draw_section_title(
+        c,
+        18 * mm,
+        PAGE_H - 38 * mm,
+        "Dove finisce l'energia prodotta?",
+        "La simulazione distingue l'energia utilizzata direttamente da quella immessa in rete."
+    )
+
+    # donut
+    draw_donut(
+        c,
+        72 * mm,
+        PAGE_H - 100 * mm,
+        35 * mm,
+        values["self_used"],
+        values["export"]
+    )
+
+    # legenda
+    c.setFillColor(GREEN)
+    c.rect(
+        125 * mm,
+        PAGE_H - 87 * mm,
+        7 * mm,
+        7 * mm,
+        fill=1,
+        stroke=0
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 9)
+
+    c.drawString(
+        136 * mm,
+        PAGE_H - 85 * mm,
+        "Autoconsumo"
+    )
+
+    c.setFont("Helvetica", 8)
+    c.setFillColor(GREY)
+
+    c.drawString(
+        136 * mm,
+        PAGE_H - 94 * mm,
+        f"{number(values['self_used'])} kWh/anno"
+    )
+
+    c.setFillColor(YELLOW)
+    c.rect(
+        125 * mm,
+        PAGE_H - 108 * mm,
+        7 * mm,
+        7 * mm,
+        fill=1,
+        stroke=0
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 9)
+
+    c.drawString(
+        136 * mm,
+        PAGE_H - 106 * mm,
+        "Energia immessa"
+    )
+
+    c.setFont("Helvetica", 8)
+    c.setFillColor(GREY)
+
+    c.drawString(
+        136 * mm,
+        PAGE_H - 115 * mm,
+        f"{number(values['export'])} kWh/anno"
+    )
+
+    # KPI
+    kpi_y = 91 * mm
+
+    draw_kpi(
+        c,
+        18 * mm,
+        kpi_y,
+        53 * mm,
+        25 * mm,
+        "A",
+        "Autoconsumo",
+        f"{values['self_used'] / max(production, 1) * 100:.0f}%",
+        GREEN
+    )
+
+    draw_kpi(
+        c,
+        78 * mm,
+        kpi_y,
+        53 * mm,
+        25 * mm,
+        "I",
+        "Energia immessa",
+        f"{values['export'] / max(production, 1) * 100:.0f}%",
+        YELLOW
+    )
+
+    draw_kpi(
+        c,
+        138 * mm,
+        kpi_y,
+        53 * mm,
+        25 * mm,
+        "R",
+        "Risparmio annuo",
+        euro(values["annual_saving"]),
+        GREEN
+    )
+
+    # box spiegazione
+    draw_round_rect(
+        c,
+        18 * mm,
+        45 * mm,
+        PAGE_W - 36 * mm,
+        35 * mm,
+        LIGHT_GREEN,
+        None,
+        8
+    )
+
+    c.setFillColor(DARK_GREEN)
+    c.setFont("Helvetica-Bold", 10)
+
+    c.drawString(
+        27 * mm,
+        70 * mm,
+        "Cosa significa?"
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica", 8)
+
+    text_lines = [
+        "Una parte dell'energia prodotta viene utilizzata direttamente dall'abitazione.",
+        "La parte non utilizzata viene immessa in rete e valorizzata secondo il valore",
+        "inserito nella simulazione."
+    ]
+
+    for i, line in enumerate(text_lines):
+
+        c.drawString(
+            27 * mm,
+            61 * mm - i * 9,
+            line
+        )
+
+    draw_footer(c, 3)
+
+    c.showPage()
+
+    # =====================================================
+    # PAGINA 4 - RITORNO INVESTIMENTO
+    # =====================================================
+
+    draw_header(
+        c,
+        "Il ritorno dell'investimento",
+        "Analisi economica"
+    )
+
+    draw_section_title(
+        c,
+        18 * mm,
+        PAGE_H - 38 * mm,
+        "I numeri principali",
+        "Una sintesi immediata del risultato economico della simulazione."
+    )
+
+    payback_text = (
+        f"{values['payback']:.1f} anni"
+        if values["payback"] is not None
+        else "Oltre 25 anni"
+    )
+
+    draw_kpi(
+        c,
+        18 * mm,
+        PAGE_H - 85 * mm,
+        55 * mm,
+        30 * mm,
+        "€",
+        "Investimento netto",
+        euro(values["net_cost"]),
+        GREEN
+    )
+
+    draw_kpi(
+        c,
+        77 * mm,
+        PAGE_H - 85 * mm,
+        55 * mm,
+        30 * mm,
+        "T",
+        "Rientro stimato",
+        payback_text,
+        YELLOW
+    )
+
+    draw_kpi(
+        c,
+        136 * mm,
+        PAGE_H - 85 * mm,
+        55 * mm,
+        30 * mm,
+        "€",
+        "Beneficio 25 anni",
+        euro(values["gross_25"]),
+        GREEN
+    )
+
+    # confronto investimento / detrazione
+    draw_round_rect(
+        c,
+        18 * mm,
+        96 * mm,
+        PAGE_W - 36 * mm,
+        35 * mm,
+        WHITE,
+        MID_GREY,
+        8
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 10)
+
+    c.drawString(
+        27 * mm,
+        120 * mm,
+        "Composizione dell'investimento"
+    )
+
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 8)
+
+    c.drawString(
+        27 * mm,
+        109 * mm,
+        "Costo complessivo"
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 9)
+
+    c.drawRightString(
+        105 * mm,
+        109 * mm,
+        euro(cost)
+    )
+
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 8)
+
+    c.drawString(
+        115 * mm,
+        109 * mm,
+        "Detrazione"
+    )
+
+    c.setFillColor(GREEN)
+    c.setFont("Helvetica-Bold", 9)
+
+    c.drawRightString(
+        185 * mm,
+        109 * mm,
+        euro(deduction)
+    )
+
+    # beneficio netto
+    c.setFillColor(LIGHT_GREEN)
+
+    c.roundRect(
+        27 * mm,
+        100 * mm,
+        158 * mm,
+        5 * mm,
+        2,
+        fill=1,
+        stroke=0
+    )
+
+    # barra
+    if cost > 0:
+
+        deduction_width = min(
+            158,
+            158 * deduction / cost
+        )
+
+        c.setFillColor(GREEN)
+
+        c.roundRect(
+            27 * mm,
+            100 * mm,
+            deduction_width,
+            5 * mm,
+            2,
+            fill=1,
+            stroke=0
+        )
+
+    # grafico economico
+    draw_economic_chart(
+        c,
+        18 * mm,
+        25 * mm,
+        PAGE_W - 36 * mm,
+        63 * mm,
+        values["years"]
+    )
+
+    draw_footer(c, 4)
+
+    c.showPage()
+
+    # =====================================================
+    # PAGINA 5 - PROIEZIONE 25 ANNI
+    # =====================================================
+
+    draw_header(
+        c,
+        "Proiezione economica",
+        "Orizzonte 25 anni"
+    )
+
+    draw_section_title(
+        c,
+        18 * mm,
+        PAGE_H - 38 * mm,
+        "Come evolve il beneficio nel tempo",
+        "La simulazione considera un degrado della produzione dello 0,5% annuo e una crescita del prezzo dell'energia del 2% annuo."
+    )
+
+    # tabella
+    table_x = 18 * mm
+    table_y = PAGE_H - 80 * mm
+
+    col_widths = [
+        25 * mm,
+        45 * mm,
+        55 * mm
+    ]
+
+    headers = [
+        "Periodo",
+        "Beneficio annuo",
+        "Beneficio cumulato"
+    ]
+
+    c.setFillColor(GREEN)
+    c.roundRect(
+        table_x,
+        table_y,
+        sum(col_widths),
+        10 * mm,
+        3,
+        fill=1,
+        stroke=0
+    )
+
+    c.setFillColor(WHITE)
+    c.setFont("Helvetica-Bold", 8)
+
+    xx = table_x
+
+    for i, header in enumerate(headers):
+
+        c.drawString(
+            xx + 4 * mm,
+            table_y + 3.5 * mm,
+            header
+        )
+
+        xx += col_widths[i]
+
+    selected_years = [1, 5, 10, 15, 20, 25]
+
+    row_y = table_y - 9 * mm
+
+    for index, year_number in enumerate(selected_years):
+
+        item = values["years"][year_number - 1]
+
+        if index % 2 == 0:
+            c.setFillColor(LIGHT_GREY)
+        else:
+            c.setFillColor(WHITE)
+
+        c.rect(
+            table_x,
+            row_y,
+            sum(col_widths),
+            9 * mm,
+            fill=1,
+            stroke=0
+        )
+
+        c.setFillColor(DARK)
+        c.setFont("Helvetica-Bold", 8)
+
+        c.drawString(
+            table_x + 4 * mm,
+            row_y + 3 * mm,
+            f"{year_number}° anno"
+        )
+
+        c.drawString(
+            table_x + col_widths[0] + 4 * mm,
+            row_y + 3 * mm,
+            euro(item["benefit"])
+        )
+
+        c.setFillColor(GREEN)
+        c.drawString(
+            table_x + col_widths[0] + col_widths[1] + 4 * mm,
+            row_y + 3 * mm,
+            euro(item["cumulative"])
+        )
+
+        row_y -= 9 * mm
+
+    # box finale
+    draw_round_rect(
+        c,
+        18 * mm,
+        72 * mm,
+        PAGE_W - 36 * mm,
+        32 * mm,
+        LIGHT_GREEN,
+        None,
+        8
+    )
+
+    c.setFillColor(DARK_GREEN)
+    c.setFont("Helvetica-Bold", 11)
+
+    c.drawString(
+        27 * mm,
+        91 * mm,
+        "Beneficio cumulato stimato a 25 anni"
+    )
+
+    c.setFillColor(GREEN)
+    c.setFont("Helvetica-Bold", 21)
+
+    c.drawString(
+        27 * mm,
+        79 * mm,
+        euro(values["gross_25"])
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica", 8)
+
+    c.drawRightString(
+        PAGE_W - 27 * mm,
+        82 * mm,
+        f"Beneficio netto dopo l'investimento: {euro(values['net_25'])}"
+    )
+
+    # assunzioni
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 7)
+
+    assumptions = [
+        "Degrado produzione: 0,5% annuo",
+        "Crescita prezzo energia acquistata: 2% annuo",
+        f"Prezzo energia acquistata: {decimal(energy_price)} €/kWh",
+        f"Valore energia immessa: {decimal(export_price)} €/kWh",
+        f"Profilo consumi: {profile_label}"
+    ]
+
+    yy = 57 * mm
+
+    for line in assumptions:
+
+        c.drawString(
+            18 * mm,
+            yy,
+            "• " + line
+        )
+
+        yy -= 5 * mm
+
+    draw_footer(c, 5)
+
+    c.showPage()
+
+    # =====================================================
+    # PAGINA 6 - COSA COMPRENDE
+    # =====================================================
+
+    draw_header(
+        c,
+        "Cosa comprende la soluzione",
+        "Servizi, assistenza e garanzie"
+    )
+
+    draw_section_title(
+        c,
+        18 * mm,
+        PAGE_H - 38 * mm,
+        "Un progetto completo, dalla progettazione al monitoraggio",
+        "L'obiettivo è accompagnarti in tutte le fasi della realizzazione."
     )
 
     services = [
-
-        [
-            "SOPRALLUOGO",
-            "Analisi preliminare dell'immobile e degli spazi disponibili."
-        ],
-
-        [
-            "PROGETTAZIONE",
-            "Dimensionamento dell'impianto in funzione delle esigenze energetiche."
-        ],
-
-        [
-            "INSTALLAZIONE",
-            "Installazione eseguita da personale specializzato."
-        ],
-
-        [
-            "PRATICHE GSE",
-            "Gestione delle pratiche necessarie per l'impianto."
-        ],
-
-        [
-            "DETRAZIONE FISCALE",
-            "Gestione della documentazione relativa alla detrazione indicata."
-        ],
-
-        [
-            "MONITORAGGIO APP",
-            "Controllo della produzione e delle prestazioni dell'impianto tramite App."
-        ],
-
-        [
-            "SMALTIMENTO",
-            "Gestione dello smaltimento di moduli fotovoltaici e inverter a fine vita."
-        ]
-
+        ("FV", "Impianto fotovoltaico", "Pannelli e componentistica dimensionati sul progetto."),
+        ("BA", "Accumulo energetico", "Sistema di batterie per aumentare l'utilizzo dell'energia prodotta."),
+        ("PR", "Progettazione", "Analisi tecnica e dimensionamento dell'impianto."),
+        ("IN", "Installazione", "Installazione e messa in servizio dell'impianto."),
+        ("GS", "Pratiche GSE", "Gestione delle pratiche necessarie."),
+        ("AP", "Monitoraggio App", "Controllo della produzione e dei consumi."),
     ]
 
-    service_data = []
+    start_y = PAGE_H - 72 * mm
 
-    for title, text in services:
+    for i, (icon, title, text) in enumerate(services):
 
-        service_data.append([
+        col = i % 2
+        row = i // 2
 
-            Paragraph(
-                title,
+        x = 18 * mm + col * 88 * mm
+        y = start_y - row * 42 * mm
 
-                ParagraphStyle(
-                    "ServiceTitle",
-                    fontName="Helvetica-Bold",
-                    fontSize=8.5,
-                    textColor=DARK_GREEN
-                )
-            ),
-
-            Paragraph(
-                text,
-                normal_style()
-            )
-
-        ])
-
-    service_table = Table(
-
-        service_data,
-
-        colWidths=[
-            43 * mm,
-            117 * mm
-        ]
-
-    )
-
-    service_table.setStyle(
-
-        TableStyle([
-
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                MID_GREY
-            ),
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (0, -1),
-                LIGHT_GREEN
-            ),
-
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "MIDDLE"
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        service_table
-    )
-
-    story.append(
-        Spacer(
-            1,
-            10 * mm
+        draw_round_rect(
+            c,
+            x,
+            y,
+            82 * mm,
+            34 * mm,
+            WHITE,
+            MID_GREY,
+            8
         )
+
+        c.setFillColor(GREEN)
+        c.circle(
+            x + 13 * mm,
+            y + 23 * mm,
+            8 * mm,
+            fill=1,
+            stroke=0
+        )
+
+        c.setFillColor(WHITE)
+        c.setFont("Helvetica-Bold", 7)
+
+        c.drawCentredString(
+            x + 13 * mm,
+            y + 21 * mm,
+            icon
+        )
+
+        c.setFillColor(DARK)
+        c.setFont("Helvetica-Bold", 9)
+
+        c.drawString(
+            x + 25 * mm,
+            y + 24 * mm,
+            title
+        )
+
+        c.setFillColor(GREY)
+        c.setFont("Helvetica", 7)
+
+        # testo su due righe
+        words = text.split()
+        line1 = ""
+        line2 = ""
+
+        for word in words:
+
+            if stringWidth(
+                line1 + " " + word,
+                "Helvetica",
+                7
+            ) < 48 * mm:
+                line1 += (" " if line1 else "") + word
+            else:
+                line2 += (" " if line2 else "") + word
+
+        c.drawString(
+            x + 25 * mm,
+            y + 14 * mm,
+            line1
+        )
+
+        c.drawString(
+            x + 25 * mm,
+            y + 7 * mm,
+            line2
+        )
+
+    # garanzie
+    draw_round_rect(
+        c,
+        18 * mm,
+        37 * mm,
+        PAGE_W - 36 * mm,
+        30 * mm,
+        LIGHT_YELLOW,
+        None,
+        8
     )
 
-    story.append(
-        Paragraph(
-            "Garanzie",
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 10)
 
-            ParagraphStyle(
-                "GuaranteeTitle",
-                fontName="Helvetica-Bold",
-                fontSize=14,
-                textColor=DARK_GREEN,
-                spaceAfter=5 * mm
-            )
-        )
+    c.drawString(
+        27 * mm,
+        57 * mm,
+        "Garanzie indicative della soluzione"
     )
 
     guarantees = [
-
-        [
-            "Pannelli - fabbricazione",
-            "25 anni"
-        ],
-
-        [
-            "Pannelli - garanzia di potenza",
-            "30 anni"
-        ],
-
-        [
-            "Inverter",
-            "12 anni"
-        ],
-
-        [
-            "Batterie",
-            "11 anni"
-        ]
-
+        "Pannelli: garanzia prodotto fino a 25 anni",
+        "Potenza pannelli: garanzia prestazionale fino a 30 anni",
+        "Inverter: garanzia fino a 12 anni",
+        "Batterie: garanzia fino a 11 anni"
     ]
 
-    guarantee_table = Table(
+    for i, item in enumerate(guarantees):
 
-        guarantees,
+        c.setFillColor(DARK)
+        c.setFont("Helvetica", 7.5)
 
-        colWidths=[
-            115 * mm,
-            45 * mm
-        ]
+        c.drawString(
+            27 * mm + (i % 2) * 80 * mm,
+            47 * mm - (i // 2) * 9 * mm,
+            "✓ " + item
+        )
 
-    )
+    draw_footer(c, 6)
 
-    guarantee_table.setStyle(
-
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_YELLOW
-            ),
-
-            (
-                "GRID",
-                (0, 0),
-                (-1, -1),
-                0.5,
-                MID_GREY
-            ),
-
-            (
-                "FONTNAME",
-                (0, 0),
-                (0, -1),
-                "Helvetica-Bold"
-            ),
-
-            (
-                "FONTNAME",
-                (1, 0),
-                (1, -1),
-                "Helvetica-Bold"
-            ),
-
-            (
-                "ALIGN",
-                (1, 0),
-                (1, -1),
-                "CENTER"
-            ),
-
-            (
-                "FONTSIZE",
-                (0, 0),
-                (-1, -1),
-                9
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                5
-            )
-
-        ])
-
-    )
-
-    story.append(
-        guarantee_table
-    )
-
-    story.append(
-        PageBreak()
-    )
-
+    c.showPage()
 
     # =====================================================
-    # PAGINA 6 - CONTATTI
+    # PAGINA 7 - CONTATTI
     # =====================================================
 
-    story.append(
-        Spacer(
-            1,
-            12 * mm
+    c.setFillColor(GREEN)
+    c.rect(
+        0,
+        0,
+        PAGE_W,
+        PAGE_H,
+        fill=1,
+        stroke=0
+    )
+
+    # decorazione
+    c.setFillColor(DARK_GREEN)
+    c.circle(
+        PAGE_W + 15 * mm,
+        PAGE_H - 20 * mm,
+        65 * mm,
+        fill=1,
+        stroke=0
+    )
+
+    draw_sun(
+        c,
+        PAGE_W - 45 * mm,
+        PAGE_H - 42 * mm,
+        22
+    )
+
+    c.setFillColor(WHITE)
+    c.setFont("Helvetica-Bold", 25)
+
+    c.drawString(
+        20 * mm,
+        PAGE_H - 50 * mm,
+        "La tua energia."
+    )
+
+    c.drawString(
+        20 * mm,
+        PAGE_H - 63 * mm,
+        "Il tuo risparmio."
+    )
+
+    c.setFont("Helvetica", 10)
+
+    c.drawString(
+        20 * mm,
+        PAGE_H - 79 * mm,
+        "Per informazioni, approfondimenti e un'analisi personalizzata"
+    )
+
+    # contatto
+    draw_round_rect(
+        c,
+        20 * mm,
+        72 * mm,
+        PAGE_W - 40 * mm,
+        65 * mm,
+        WHITE,
+        None,
+        10
+    )
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 17)
+
+    c.drawString(
+        30 * mm,
+        121 * mm,
+        "Simone Alfarano"
+    )
+
+    c.setFillColor(GREEN)
+    c.setFont("Helvetica-Bold", 9)
+
+    c.drawString(
+        30 * mm,
+        111 * mm,
+        "RESPONSABILE COMMERCIALE"
+    )
+
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 8.5)
+
+    contact_lines = [
+        "Energia Giusta",
+        "Partner ENI Plenitude",
+        "",
+        "Tel. / WhatsApp: 351.7478652",
+        "Email: simone.alfarano@energiagiusta.it",
+        "Sito: www.energiagiusta.it"
+    ]
+
+    yy = 99 * mm
+
+    for line in contact_lines:
+
+        c.drawString(
+            30 * mm,
+            yy,
+            line
         )
+
+        yy -= 7 * mm
+
+    # call to action
+    c.setFillColor(YELLOW)
+    c.roundRect(
+        30 * mm,
+        48 * mm,
+        65 * mm,
+        13 * mm,
+        6,
+        fill=1,
+        stroke=0
     )
 
-    story.append(
-        Paragraph(
-            "Grazie per la fiducia",
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 9)
 
-            ParagraphStyle(
-                "Thanks",
-                fontName="Helvetica-Bold",
-                fontSize=25,
-                leading=30,
-                textColor=DARK_GREEN,
-                alignment=TA_CENTER,
-                spaceAfter=5 * mm
-            )
-        )
+    c.drawCentredString(
+        62.5 * mm,
+        52.5 * mm,
+        "CONTATTAMI PER INFO"
     )
 
-    story.append(
-        Paragraph(
-            "Per qualsiasi approfondimento o per definire "
-            "la configurazione dell'impianto, resto a disposizione.",
+    c.setFillColor(WHITE)
+    c.setFont("Helvetica", 7)
 
-            ParagraphStyle(
-                "ThanksSub",
-                fontName="Helvetica",
-                fontSize=11,
-                leading=16,
-                textColor=GREY,
-                alignment=TA_CENTER
-            )
-        )
+    c.drawString(
+        20 * mm,
+        18 * mm,
+        "Stima commerciale. Il risultato dipende da tariffe, profilo reale dei consumi,"
     )
 
-    story.append(
-        Spacer(
-            1,
-            18 * mm
-        )
+    c.drawString(
+        20 * mm,
+        13 * mm,
+        "condizioni di scambio/ritiro, ombreggiamento e altri fattori."
     )
 
-    contact_table = Table(
-
-        [[
-
-            Paragraph(
-                "<b>Simone Alfarano</b><br/><br/>"
-                "Responsabile Commerciale<br/>"
-                "Energia Giusta<br/>"
-                "Partner ENI Plenitude",
-
-                ParagraphStyle(
-                    "ContactName",
-                    fontName="Helvetica",
-                    fontSize=11,
-                    leading=16,
-                    textColor=DARK
-                )
-            ),
-
-            Paragraph(
-                "<b>CONTATTI</b><br/><br/>"
-                "Tel. / WhatsApp: 351.7478652<br/>"
-                "WhatsApp disponibile<br/><br/>"
-                "Email: simone.alfarano@energiagiusta.it<br/><br/>"
-                "Sito: www.energiagiusta.it",
-
-                ParagraphStyle(
-                    "ContactInfo",
-                    fontName="Helvetica",
-                    fontSize=9.5,
-                    leading=14,
-                    textColor=DARK
-                )
-            )
-
-        ]],
-
-        colWidths=[
-            80 * mm,
-            80 * mm
-        ]
-
+    c.drawRightString(
+        PAGE_W - 20 * mm,
+        13 * mm,
+        "Non è un preventivo finanziario."
     )
 
-    contact_table.setStyle(
+    c.showPage()
 
-        TableStyle([
-
-            (
-                "BACKGROUND",
-                (0, 0),
-                (-1, -1),
-                LIGHT_GREEN
-            ),
-
-            (
-                "BOX",
-                (0, 0),
-                (-1, -1),
-                1,
-                GREEN
-            ),
-
-            (
-                "VALIGN",
-                (0, 0),
-                (-1, -1),
-                "TOP"
-            ),
-
-            (
-                "LEFTPADDING",
-                (0, 0),
-                (-1, -1),
-                8 * mm
-            ),
-
-            (
-                "RIGHTPADDING",
-                (0, 0),
-                (-1, -1),
-                8 * mm
-            ),
-
-            (
-                "TOPPADDING",
-                (0, 0),
-                (-1, -1),
-                8 * mm
-            ),
-
-            (
-                "BOTTOMPADDING",
-                (0, 0),
-                (-1, -1),
-                8 * mm
-            )
-
-        ])
-
-    )
-
-    story.append(
-        contact_table
-    )
-
-    story.append(
-        Spacer(
-            1,
-            25 * mm
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "ENERGIA GIUSTA",
-
-            ParagraphStyle(
-                "FinalBrand",
-                fontName="Helvetica-Bold",
-                fontSize=22,
-                textColor=GREEN,
-                alignment=TA_CENTER
-            )
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            4 * mm
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "Felicità sostenibile. Semplicemente quella Giusta.",
-
-            ParagraphStyle(
-                "FinalClaim",
-                fontName="Helvetica",
-                fontSize=10,
-                textColor=GREY,
-                alignment=TA_CENTER
-            )
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            15 * mm
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "Stima commerciale: il risultato dipende da tariffe, "
-            "profilo reale dei consumi, condizioni di scambio/ritiro, "
-            "ombreggiamento e altri fattori.<br/><br/>"
-            "<b>Il presente documento non costituisce un preventivo finanziario.</b>",
-
-            ParagraphStyle(
-                "DisclaimerFinal",
-                fontName="Helvetica",
-                fontSize=7.5,
-                leading=11,
-                textColor=GREY,
-                alignment=TA_CENTER
-            )
-        )
-    )
-
-
-    # =====================================================
-    # COSTRUZIONE PDF
-    # =====================================================
-
-    doc.build(
-        story,
-        onFirstPage=draw_logo,
-        onLaterPages=draw_logo
-    )
+    c.save()
 
     buffer.seek(0)
 
+    filename = (
+        "Analisi_Fotovoltaica_Energia_Giusta.pdf"
+    )
+
     return send_file(
-
         buffer,
-
         mimetype="application/pdf",
-
         as_attachment=True,
-
-        download_name="Analisi_Fotovoltaica.pdf"
-
+        download_name=filename
     )
 
 
@@ -2614,7 +2052,6 @@ def generate_pdf():
 # =========================================================
 
 if __name__ == "__main__":
-
     app.run(
         host="127.0.0.1",
         port=5000,
