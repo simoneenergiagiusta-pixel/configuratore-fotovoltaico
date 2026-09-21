@@ -4,7 +4,6 @@ from urllib.request import Request, urlopen
 import json
 import io
 import math
-from datetime import datetime
 
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
@@ -16,6 +15,8 @@ app = Flask(__name__)
 
 PVGIS_URL = "https://re.jrc.ec.europa.eu/api/v5_3/PVcalc"
 
+PAGE_W, PAGE_H = A4
+
 
 # =========================================================
 # PVGIS
@@ -23,6 +24,7 @@ PVGIS_URL = "https://re.jrc.ec.europa.eu/api/v5_3/PVcalc"
 
 def pvgis(params):
     url = PVGIS_URL + "?" + urlencode(params)
+
     req = Request(
         url,
         headers={"User-Agent": "ConfiguratoreFotovoltaico/1.0"}
@@ -39,6 +41,7 @@ def index():
 
 @app.post("/api/pvgis")
 def api_pvgis():
+
     d = request.get_json(force=True)
 
     params = {
@@ -122,7 +125,6 @@ def calculate_values(d):
         cost - deduction
     )
 
-    # Proiezione economica
     degradation = 0.005
     energy_price_growth = 0.02
 
@@ -192,8 +194,12 @@ def calculate_values(d):
 
 @app.post("/api/calculate")
 def calculate():
+
     d = request.get_json(force=True)
-    return jsonify(calculate_values(d))
+
+    return jsonify(
+        calculate_values(d)
+    )
 
 
 # =========================================================
@@ -217,11 +223,8 @@ WHITE = colors.white
 
 
 # =========================================================
-# FUNZIONI GRAFICHE
+# FORMATTAZIONE
 # =========================================================
-
-PAGE_W, PAGE_H = A4
-
 
 def euro(value):
     return "€ " + f"{value:,.0f}".replace(",", ".")
@@ -235,14 +238,97 @@ def decimal(value):
     return f"{value:.2f}".replace(".", ",")
 
 
-def draw_round_rect(c, x, y, w, h, fill, stroke=None, radius=8):
+# =========================================================
+# TESTO CON A CAPO AUTOMATICO
+# =========================================================
+
+def wrap_text(text, font="Helvetica", size=8, max_width=50*mm):
+
+    words = str(text).split()
+
+    lines = []
+    current = ""
+
+    for word in words:
+
+        test = word if not current else current + " " + word
+
+        if stringWidth(test, font, size) <= max_width:
+            current = test
+        else:
+
+            if current:
+                lines.append(current)
+
+            current = word
+
+    if current:
+        lines.append(current)
+
+    return lines
+
+
+def draw_wrapped_text(
+    c,
+    text,
+    x,
+    y,
+    max_width,
+    font="Helvetica",
+    size=8,
+    leading=11,
+    color=DARK,
+    max_lines=None
+):
+
+    lines = wrap_text(
+        text,
+        font,
+        size,
+        max_width
+    )
+
+    if max_lines:
+        lines = lines[:max_lines]
+
+    c.setFillColor(color)
+    c.setFont(font, size)
+
+    for i, line in enumerate(lines):
+
+        c.drawString(
+            x,
+            y - i * leading,
+            line
+        )
+
+    return len(lines) * leading
+
+
+# =========================================================
+# BOX
+# =========================================================
+
+def draw_round_rect(
+    c,
+    x,
+    y,
+    w,
+    h,
+    fill,
+    stroke=None,
+    radius=7
+):
+
     c.setFillColor(fill)
 
     if stroke:
         c.setStrokeColor(stroke)
         c.setLineWidth(0.7)
+        stroke_value = 1
     else:
         c.setStrokeColor(fill)
+        stroke_value = 0
 
     c.roundRect(
         x,
@@ -251,72 +337,135 @@ def draw_round_rect(c, x, y, w, h, fill, stroke=None, radius=8):
         h,
         radius,
         fill=1,
-        stroke=1 if stroke else 0
+        stroke=stroke_value
     )
 
 
-def draw_header(c, title, subtitle=None):
+# =========================================================
+# HEADER / FOOTER
+# =========================================================
+
+def draw_header(c, title, subtitle=""):
 
     c.setFillColor(GREEN)
+
     c.rect(
         0,
-        PAGE_H - 22 * mm,
+        PAGE_H - 22*mm,
         PAGE_W,
-        22 * mm,
+        22*mm,
         fill=1,
         stroke=0
     )
 
     c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", 18)
+
+    c.setFont(
+        "Helvetica-Bold",
+        17
+    )
+
     c.drawString(
-        18 * mm,
-        PAGE_H - 13 * mm,
+        18*mm,
+        PAGE_H - 13.5*mm,
         title
     )
 
     if subtitle:
-        c.setFont("Helvetica", 8.5)
+
+        c.setFont(
+            "Helvetica",
+            7.5
+        )
+
         c.drawRightString(
-            PAGE_W - 18 * mm,
-            PAGE_H - 13 * mm,
+            PAGE_W - 18*mm,
+            PAGE_H - 13.5*mm,
             subtitle
         )
 
 
-def draw_footer(c, page_number):
+def draw_footer(c, page):
 
     c.setStrokeColor(MID_GREY)
-    c.setLineWidth(0.5)
+    c.setLineWidth(0.4)
 
     c.line(
-        15 * mm,
-        12 * mm,
-        PAGE_W - 15 * mm,
-        12 * mm
+        15*mm,
+        12*mm,
+        PAGE_W - 15*mm,
+        12*mm
     )
 
     c.setFillColor(GREY)
-    c.setFont("Helvetica", 7)
+
+    c.setFont(
+        "Helvetica",
+        6.5
+    )
 
     c.drawString(
-        15 * mm,
-        7 * mm,
+        15*mm,
+        7*mm,
         "Energia Giusta • Partner ENI Plenitude"
     )
 
     c.drawRightString(
-        PAGE_W - 15 * mm,
-        7 * mm,
-        f"Pagina {page_number}"
+        PAGE_W - 15*mm,
+        7*mm,
+        f"Pagina {page}"
     )
 
 
-def draw_sun(c, x, y, size=18):
+def draw_section_title(
+    c,
+    title,
+    subtitle,
+    y
+):
+
+    c.setFillColor(DARK)
+
+    c.setFont(
+        "Helvetica-Bold",
+        18
+    )
+
+    c.drawString(
+        18*mm,
+        y,
+        title
+    )
+
+    c.setFillColor(GREY)
+
+    c.setFont(
+        "Helvetica",
+        8
+    )
+
+    draw_wrapped_text(
+        c,
+        subtitle,
+        18*mm,
+        y - 8*mm,
+        PAGE_W - 36*mm,
+        "Helvetica",
+        8,
+        10,
+        GREY
+    )
+
+
+# =========================================================
+# ICONA SOLE
+# =========================================================
+
+def draw_sun(c, x, y, size=20):
 
     c.setStrokeColor(YELLOW)
     c.setFillColor(YELLOW)
-    c.setLineWidth(2)
+    c.setLineWidth(1.5)
 
     c.circle(
         x,
@@ -330,55 +479,23 @@ def draw_sun(c, x, y, size=18):
 
         angle = math.radians(i * 45)
 
-        x1 = x + math.cos(angle) * size * 0.48
-        y1 = y + math.sin(angle) * size * 0.48
+        x1 = x + math.cos(angle) * size * 0.45
+        y1 = y + math.sin(angle) * size * 0.45
 
         x2 = x + math.cos(angle) * size * 0.72
         y2 = y + math.sin(angle) * size * 0.72
 
-        c.line(x1, y1, x2, y2)
-
-
-def draw_battery(c, x, y, w=30, h=48):
-
-    c.setStrokeColor(GREEN)
-    c.setLineWidth(2)
-
-    c.roundRect(
-        x,
-        y,
-        w,
-        h,
-        4,
-        fill=0,
-        stroke=1
-    )
-
-    c.rect(
-        x + w * 0.35,
-        y + h,
-        w * 0.30,
-        5,
-        fill=0,
-        stroke=1
-    )
-
-    for i in range(3):
-
-        c.setFillColor(
-            MID_GREEN if i < 2 else LIGHT_GREEN
+        c.line(
+            x1,
+            y1,
+            x2,
+            y2
         )
 
-        c.roundRect(
-            x + 5,
-            y + 7 + i * 12,
-            w - 10,
-            8,
-            2,
-            fill=1,
-            stroke=0
-        )
 
+# =========================================================
+# CASA
+# =========================================================
 
 def draw_house(c, x, y, w=55, h=40):
 
@@ -395,50 +512,64 @@ def draw_house(c, x, y, w=55, h=40):
         stroke=1
     )
 
-    roof = [
+    path = c.beginPath()
+
+    path.moveTo(
         x - 5,
-        y + h,
-        x + w / 2,
-        y + h + 30,
+        y + h
+    )
+
+    path.lineTo(
+        x + w/2,
+        y + h + 28
+    )
+
+    path.lineTo(
         x + w + 5,
         y + h
-    ]
+    )
 
-    path = c.beginPath()
-    path.moveTo(roof[0], roof[1])
-    path.lineTo(roof[2], roof[3])
-    path.lineTo(roof[4], roof[5])
     path.close()
 
     c.setFillColor(GREEN)
-    c.drawPath(path, fill=1, stroke=0)
 
-    c.setFillColor(WHITE)
-    c.rect(
-        x + w * 0.42,
-        y,
-        w * 0.18,
-        h * 0.55,
+    c.drawPath(
+        path,
         fill=1,
         stroke=0
     )
 
-    # pannelli
+    # porta
+    c.setFillColor(WHITE)
+
+    c.rect(
+        x + w*0.42,
+        y,
+        w*0.18,
+        h*0.55,
+        fill=1,
+        stroke=0
+    )
+
+    # pannello
     c.setFillColor(DARK)
+
     c.rect(
         x + 8,
         y + h + 4,
-        w * 0.68,
+        w*0.68,
         13,
         fill=1,
         stroke=0
     )
 
     c.setStrokeColor(WHITE)
-    c.setLineWidth(0.5)
+    c.setLineWidth(0.4)
 
     for i in range(1, 4):
-        px = x + 8 + i * (w * 0.68 / 4)
+
+        px = x + 8 + i*(w*0.68/4)
+
         c.line(
             px,
             y + h + 4,
@@ -447,113 +578,201 @@ def draw_house(c, x, y, w=55, h=40):
         )
 
 
-def draw_lightning(c, x, y, size=28):
+# =========================================================
+# BATTERIA
+# =========================================================
 
-    path = c.beginPath()
+def draw_battery(c, x, y, w=27, h=45):
 
-    path.moveTo(
-        x + size * 0.20,
-        y + size
-    )
+    c.setStrokeColor(GREEN)
+    c.setLineWidth(1.5)
 
-    path.lineTo(
-        x + size * 0.72,
-        y + size
-    )
-
-    path.lineTo(
-        x + size * 0.45,
-        y + size * 0.55
-    )
-
-    path.lineTo(
-        x + size * 0.85,
-        y + size * 0.55
-    )
-
-    path.lineTo(
-        x + size * 0.15,
-        y
-    )
-
-    path.lineTo(
-        x + size * 0.38,
-        y + size * 0.45
-    )
-
-    path.lineTo(
-        x,
-        y + size * 0.45
-    )
-
-    path.close()
-
-    c.setFillColor(YELLOW)
-    c.drawPath(path, fill=1, stroke=0)
-
-
-def draw_euro(c, x, y, size=24):
-
-    c.setFillColor(GREEN)
-    c.circle(
-        x,
-        y,
-        size / 2,
-        fill=1,
-        stroke=0
-    )
-
-    c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", size * 0.75)
-
-    c.drawCentredString(
-        x,
-        y - size * 0.25,
-        "€"
-    )
-
-
-def draw_chart_monthly(c, x, y, w, h, monthly):
-
-    if not monthly:
-        return
-
-    max_value = max(monthly)
-    max_value = max(max_value, 1)
-
-    left = x + 14
-    bottom = y + 22
-    chart_w = w - 25
-    chart_h = h - 35
-
-    # area
-    c.setFillColor(LIGHT_GREY)
     c.roundRect(
         x,
         y,
         w,
         h,
-        8,
+        4,
+        fill=0,
+        stroke=1
+    )
+
+    c.rect(
+        x + w*0.35,
+        y + h,
+        w*0.30,
+        4,
+        fill=0,
+        stroke=1
+    )
+
+    for i in range(3):
+
+        c.setFillColor(
+            MID_GREEN if i < 2 else LIGHT_GREEN
+        )
+
+        c.roundRect(
+            x + 5,
+            y + 7 + i*11,
+            w - 10,
+            7,
+            2,
+            fill=1,
+            stroke=0
+        )
+
+
+# =========================================================
+# KPI
+# =========================================================
+
+def draw_kpi(
+    c,
+    x,
+    y,
+    w,
+    h,
+    icon,
+    label,
+    value,
+    accent=GREEN
+):
+
+    draw_round_rect(
+        c,
+        x,
+        y,
+        w,
+        h,
+        WHITE,
+        MID_GREY,
+        7
+    )
+
+    c.setFillColor(accent)
+
+    c.circle(
+        x + 14*mm,
+        y + h - 12*mm,
+        8*mm,
         fill=1,
         stroke=0
     )
 
-    # titolo
-    c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(WHITE)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
+
+    c.drawCentredString(
+        x + 14*mm,
+        y + h - 15*mm,
+        icon
+    )
+
+    c.setFillColor(GREY)
+
+    c.setFont(
+        "Helvetica",
+        7
+    )
+
     c.drawString(
-        x + 12,
-        y + h - 17,
+        x + 26*mm,
+        y + h - 10*mm,
+        label
+    )
+
+    c.setFillColor(DARK)
+
+    c.setFont(
+        "Helvetica-Bold",
+        15
+    )
+
+    # valore leggermente più piccolo se molto lungo
+    font_size = 15
+
+    if stringWidth(
+        value,
+        "Helvetica-Bold",
+        font_size
+    ) > w - 31*mm:
+
+        font_size = 11
+
+    c.setFont(
+        "Helvetica-Bold",
+        font_size
+    )
+
+    c.drawString(
+        x + 26*mm,
+        y + 6*mm,
+        value
+    )
+
+
+# =========================================================
+# GRAFICO PRODUZIONE MENSILE
+# =========================================================
+
+def draw_chart_monthly(
+    c,
+    x,
+    y,
+    w,
+    h,
+    monthly
+):
+
+    if not monthly:
+        return
+
+    draw_round_rect(
+        c,
+        x,
+        y,
+        w,
+        h,
+        LIGHT_GREY,
+        None,
+        8
+    )
+
+    c.setFillColor(DARK)
+
+    c.setFont(
+        "Helvetica-Bold",
+        10
+    )
+
+    c.drawString(
+        x + 10*mm,
+        y + h - 11*mm,
         "Produzione fotovoltaica mensile"
     )
 
-    # griglia
+    left = x + 15*mm
+    bottom = y + 13*mm
+
+    chart_w = w - 23*mm
+    chart_h = h - 30*mm
+
+    maximum = max(
+        max(monthly),
+        1
+    )
+
     c.setStrokeColor(MID_GREY)
     c.setLineWidth(0.4)
 
     for i in range(5):
 
-        gy = bottom + chart_h * i / 4
+        gy = bottom + chart_h*i/4
 
         c.line(
             left,
@@ -562,21 +781,28 @@ def draw_chart_monthly(c, x, y, w, h, monthly):
             gy
         )
 
-    bar_w = chart_w / 12 * 0.62
-
     months = [
         "Gen", "Feb", "Mar", "Apr",
         "Mag", "Giu", "Lug", "Ago",
         "Set", "Ott", "Nov", "Dic"
     ]
 
-    for i, value in enumerate(monthly):
+    slot = chart_w / 12
+    bar_w = slot * 0.55
 
-        bx = left + i * chart_w / 12 + (
-            chart_w / 12 - bar_w
-        ) / 2
+    for i, value in enumerate(monthly[:12]):
 
-        bh = chart_h * value / max_value
+        bx = (
+            left
+            + i*slot
+            + (slot-bar_w)/2
+        )
+
+        bh = (
+            chart_h
+            * value
+            / maximum
+        )
 
         c.setFillColor(GREEN)
 
@@ -591,33 +817,52 @@ def draw_chart_monthly(c, x, y, w, h, monthly):
         )
 
         c.setFillColor(GREY)
-        c.setFont("Helvetica", 6.5)
+
+        c.setFont(
+            "Helvetica",
+            6
+        )
 
         c.drawCentredString(
-            bx + bar_w / 2,
-            bottom - 10,
+            bx + bar_w/2,
+            bottom - 9,
             months[i]
         )
 
 
-def draw_donut(c, cx, cy, radius, self_used, export):
+# =========================================================
+# DONUT
+# =========================================================
+
+def draw_donut(
+    c,
+    cx,
+    cy,
+    radius,
+    self_used,
+    export
+):
 
     total = max(
         self_used + export,
         1
     )
 
-    self_angle = 360 * self_used / total
+    angle = (
+        360
+        * self_used
+        / total
+    )
 
     c.setFillColor(GREEN)
 
     c.wedge(
-        cx - radius,
-        cy - radius,
-        cx + radius,
-        cy + radius,
+        cx-radius,
+        cy-radius,
+        cx+radius,
+        cy+radius,
         0,
-        self_angle,
+        angle,
         fill=1,
         stroke=0
     )
@@ -625,37 +870,43 @@ def draw_donut(c, cx, cy, radius, self_used, export):
     c.setFillColor(YELLOW)
 
     c.wedge(
-        cx - radius,
-        cy - radius,
-        cx + radius,
-        cy + radius,
-        self_angle,
-        360 - self_angle,
+        cx-radius,
+        cy-radius,
+        cx+radius,
+        cy+radius,
+        angle,
+        360-angle,
         fill=1,
         stroke=0
     )
 
-    # centro bianco
     c.setFillColor(WHITE)
 
     c.circle(
         cx,
         cy,
-        radius * 0.55,
+        radius*0.57,
         fill=1,
         stroke=0
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 12)
+
+    c.setFont(
+        "Helvetica-Bold",
+        13
+    )
 
     c.drawCentredString(
         cx,
         cy + 2,
-        f"{self_used / total * 100:.0f}%"
+        f"{self_used/total*100:.0f}%"
     )
 
-    c.setFont("Helvetica", 7)
+    c.setFont(
+        "Helvetica",
+        7
+    )
 
     c.drawCentredString(
         cx,
@@ -664,52 +915,68 @@ def draw_donut(c, cx, cy, radius, self_used, export):
     )
 
 
-def draw_economic_chart(c, x, y, w, h, years):
+# =========================================================
+# GRAFICO ECONOMICO
+# =========================================================
+
+def draw_economic_chart(
+    c,
+    x,
+    y,
+    w,
+    h,
+    years
+):
 
     if not years:
         return
+
+    draw_round_rect(
+        c,
+        x,
+        y,
+        w,
+        h,
+        LIGHT_GREY,
+        None,
+        8
+    )
+
+    c.setFillColor(DARK)
+
+    c.setFont(
+        "Helvetica-Bold",
+        10
+    )
+
+    c.drawString(
+        x + 10*mm,
+        y + h - 11*mm,
+        "Crescita del beneficio cumulato"
+    )
 
     values = [
         item["cumulative"]
         for item in years
     ]
 
-    max_value = max(values)
-    max_value = max(max_value, 1)
-
-    left = x + 30
-    bottom = y + 25
-    chart_w = w - 42
-    chart_h = h - 42
-
-    c.setFillColor(LIGHT_GREY)
-
-    c.roundRect(
-        x,
-        y,
-        w,
-        h,
-        8,
-        fill=1,
-        stroke=0
+    maximum = max(
+        max(values),
+        1
     )
 
-    c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 10)
+    left = x + 17*mm
+    bottom = y + 15*mm
 
-    c.drawString(
-        x + 12,
-        y + h - 17,
-        "Crescita del beneficio cumulato"
-    )
+    chart_w = w - 25*mm
+    chart_h = h - 32*mm
 
-    # griglia
     c.setStrokeColor(MID_GREY)
     c.setLineWidth(0.4)
 
     for i in range(5):
 
-        gy = bottom + chart_h * i / 4
+        gy = bottom + chart_h*i/4
 
         c.line(
             left,
@@ -718,18 +985,25 @@ def draw_economic_chart(c, x, y, w, h, years):
             gy
         )
 
-    # linea
     c.setStrokeColor(GREEN)
-    c.setLineWidth(2.2)
+    c.setLineWidth(2)
 
     previous = None
 
     for i, value in enumerate(values):
 
-        px = left + chart_w * i / 24
-        py = bottom + chart_h * value / max_value
+        px = (
+            left
+            + chart_w*i/24
+        )
+
+        py = (
+            bottom
+            + chart_h*value/maximum
+        )
 
         if previous:
+
             c.line(
                 previous[0],
                 previous[1],
@@ -737,7 +1011,10 @@ def draw_economic_chart(c, x, y, w, h, years):
                 py
             )
 
-        previous = (px, py)
+        previous = (
+            px,
+            py
+        )
 
         if i in [0, 4, 9, 14, 19, 24]:
 
@@ -746,141 +1023,23 @@ def draw_economic_chart(c, x, y, w, h, years):
             c.circle(
                 px,
                 py,
-                3,
+                2.5,
                 fill=1,
                 stroke=0
             )
 
             c.setFillColor(GREY)
-            c.setFont("Helvetica", 6.5)
+
+            c.setFont(
+                "Helvetica",
+                6
+            )
 
             c.drawCentredString(
                 px,
-                bottom - 11,
-                str(i + 1)
+                bottom - 9,
+                str(i+1)
             )
-
-    # asse
-    c.setFillColor(GREY)
-    c.setFont("Helvetica", 6)
-
-    c.drawString(
-        left,
-        bottom - 21,
-        "Anno"
-    )
-
-    c.drawRightString(
-        left + chart_w,
-        bottom - 21,
-        "25"
-    )
-
-
-def draw_kpi(c, x, y, w, h, icon, label, value, accent):
-
-    draw_round_rect(
-        c,
-        x,
-        y,
-        w,
-        h,
-        WHITE,
-        MID_GREY,
-        8
-    )
-
-    c.setFillColor(accent)
-    c.circle(
-        x + 18,
-        y + h - 20,
-        11,
-        fill=1,
-        stroke=0
-    )
-
-    c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", 10)
-
-    c.drawCentredString(
-        x + 18,
-        y + h - 23,
-        icon
-    )
-
-    c.setFillColor(GREY)
-    c.setFont("Helvetica", 7.5)
-
-    c.drawString(
-        x + 35,
-        y + h - 17,
-        label
-    )
-
-    c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 17)
-
-    c.drawString(
-        x + 35,
-        y + 14,
-        value
-    )
-
-
-def draw_section_title(c, x, y, title, subtitle=None):
-
-    c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 17)
-
-    c.drawString(
-        x,
-        y,
-        title
-    )
-
-    if subtitle:
-
-        c.setFillColor(GREY)
-        c.setFont("Helvetica", 8.5)
-
-        c.drawString(
-            x,
-            y - 14,
-            subtitle
-        )
-
-
-def draw_bullet(c, x, y, title, text):
-
-    c.setFillColor(GREEN)
-
-    c.circle(
-        x,
-        y + 3,
-        4,
-        fill=1,
-        stroke=0
-    )
-
-    c.setFillColor(DARK)
-
-    c.setFont("Helvetica-Bold", 9)
-
-    c.drawString(
-        x + 12,
-        y,
-        title
-    )
-
-    c.setFillColor(GREY)
-
-    c.setFont("Helvetica", 7.5)
-
-    c.drawString(
-        x + 12,
-        y - 11,
-        text
-    )
 
 
 # =========================================================
@@ -935,6 +1094,7 @@ def generate_pdf():
     )
 
     if not monthly:
+
         monthly = [
             production / 12
             for _ in range(12)
@@ -956,10 +1116,6 @@ def generate_pdf():
         "Equilibrato"
     )
 
-    # -----------------------------------------------------
-    # PDF
-    # -----------------------------------------------------
-
     buffer = io.BytesIO()
 
     c = canvas.Canvas(
@@ -976,6 +1132,7 @@ def generate_pdf():
     # =====================================================
 
     c.setFillColor(LIGHT_GREY)
+
     c.rect(
         0,
         0,
@@ -985,118 +1142,144 @@ def generate_pdf():
         stroke=0
     )
 
-    # fascia verde
     c.setFillColor(GREEN)
+
     c.rect(
         0,
-        PAGE_H - 85 * mm,
+        PAGE_H - 80*mm,
         PAGE_W,
-        85 * mm,
+        80*mm,
         fill=1,
         stroke=0
     )
 
-    # marchio testuale
     c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", 25)
+
+    c.setFont(
+        "Helvetica-Bold",
+        24
+    )
 
     c.drawString(
-        20 * mm,
-        PAGE_H - 30 * mm,
+        20*mm,
+        PAGE_H - 28*mm,
         "ENERGIA GIUSTA"
     )
 
-    c.setFont("Helvetica", 9)
+    c.setFont(
+        "Helvetica",
+        9
+    )
 
     c.drawString(
-        20 * mm,
-        PAGE_H - 39 * mm,
+        20*mm,
+        PAGE_H - 37*mm,
         "Partner ENI Plenitude"
+    )
+
+    draw_sun(
+        c,
+        PAGE_W - 45*mm,
+        PAGE_H - 30*mm,
+        25
     )
 
     # titolo
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 28)
+
+    c.setFont(
+        "Helvetica-Bold",
+        27
+    )
 
     c.drawString(
-        20 * mm,
-        PAGE_H - 115 * mm,
+        20*mm,
+        PAGE_H - 111*mm,
         "Analisi Fotovoltaica"
     )
 
     c.setFillColor(GREY)
-    c.setFont("Helvetica", 11)
+
+    c.setFont(
+        "Helvetica",
+        10
+    )
 
     c.drawString(
-        20 * mm,
-        PAGE_H - 126 * mm,
+        20*mm,
+        PAGE_H - 122*mm,
         "Analisi energetica ed economica del tuo impianto"
     )
 
     # illustrazione
-    draw_sun(
-        c,
-        PAGE_W - 48 * mm,
-        PAGE_H - 104 * mm,
-        25
-    )
-
     draw_house(
         c,
-        PAGE_W - 105 * mm,
-        PAGE_H - 177 * mm,
-        62,
-        43
+        PAGE_W - 92*mm,
+        PAGE_H - 173*mm,
+        58,
+        42
     )
 
     draw_battery(
         c,
-        PAGE_W - 38 * mm,
-        PAGE_H - 170 * mm,
+        PAGE_W - 38*mm,
+        PAGE_H - 168*mm,
         25,
-        45
+        44
     )
 
     # indirizzo
     draw_round_rect(
         c,
-        20 * mm,
-        66 * mm,
-        PAGE_W - 40 * mm,
-        27 * mm,
+        20*mm,
+        66*mm,
+        PAGE_W - 40*mm,
+        28*mm,
         WHITE,
         MID_GREY,
-        8
+        7
     )
 
     c.setFillColor(GREY)
-    c.setFont("Helvetica", 8)
+
+    c.setFont(
+        "Helvetica",
+        7
+    )
 
     c.drawString(
-        28 * mm,
-        82 * mm,
+        28*mm,
+        83*mm,
         "ABITAZIONE ANALIZZATA"
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 12)
 
-    c.drawString(
-        28 * mm,
-        72 * mm,
-        address
+    c.setFont(
+        "Helvetica-Bold",
+        11
     )
 
-    # tre indicatori
-    box_y = 32 * mm
-    box_w = 50 * mm
+    draw_wrapped_text(
+        c,
+        address,
+        28*mm,
+        74*mm,
+        PAGE_W - 56*mm,
+        "Helvetica-Bold",
+        11,
+        13,
+        DARK,
+        2
+    )
 
+    # KPI
     draw_kpi(
         c,
-        20 * mm,
-        box_y,
-        box_w,
-        23 * mm,
+        20*mm,
+        32*mm,
+        50*mm,
+        24*mm,
         "S",
         "Potenza FV",
         f"{decimal(kwp)} kWp",
@@ -1105,10 +1288,10 @@ def generate_pdf():
 
     draw_kpi(
         c,
-        77 * mm,
-        box_y,
-        box_w,
-        23 * mm,
+        77*mm,
+        32*mm,
+        50*mm,
+        24*mm,
         "B",
         "Accumulo",
         f"{decimal(battery)} kWh",
@@ -1117,22 +1300,25 @@ def generate_pdf():
 
     draw_kpi(
         c,
-        134 * mm,
-        box_y,
-        box_w,
-        23 * mm,
+        134*mm,
+        32*mm,
+        50*mm,
+        24*mm,
         "€",
         "Risparmio annuo",
         euro(values["annual_saving"]),
         GREEN
     )
 
-    draw_footer(c, 1)
+    draw_footer(
+        c,
+        1
+    )
 
     c.showPage()
 
     # =====================================================
-    # PAGINA 2 - IL TUO IMPIANTO
+    # PAGINA 2
     # =====================================================
 
     draw_header(
@@ -1143,37 +1329,30 @@ def generate_pdf():
 
     draw_section_title(
         c,
-        18 * mm,
-        PAGE_H - 38 * mm,
         "Configurazione del sistema",
-        "I principali parametri utilizzati per la simulazione"
+        "I principali parametri utilizzati nella simulazione.",
+        PAGE_H - 38*mm
     )
 
-    # schede tecniche
     cards = [
         ("Potenza fotovoltaica", f"{decimal(kwp)} kWp"),
         ("Batteria di accumulo", f"{decimal(battery)} kWh"),
         ("Consumo annuo", f"{number(consumption)} kWh"),
         ("Produzione stimata", f"{number(production)} kWh"),
         ("Inclinazione", f"{decimal(angle)}°"),
-        ("Perdite sistema", f"{decimal(loss)}%"),
+        ("Perdite sistema", f"{decimal(loss)}%")
     ]
 
-    start_x = 18 * mm
-    start_y = PAGE_H - 70 * mm
-
-    card_w = 55 * mm
-    card_h = 23 * mm
-    gap_x = 5 * mm
-    gap_y = 5 * mm
+    card_w = 55*mm
+    card_h = 23*mm
 
     for i, (label, value) in enumerate(cards):
 
         col = i % 3
         row = i // 3
 
-        x = start_x + col * (card_w + gap_x)
-        y = start_y - row * (card_h + gap_y)
+        x = 18*mm + col*59*mm
+        y = PAGE_H - 72*mm - row*29*mm
 
         draw_round_rect(
             c,
@@ -1187,48 +1366,60 @@ def generate_pdf():
         )
 
         c.setFillColor(GREY)
-        c.setFont("Helvetica", 7)
+        c.setFont(
+            "Helvetica",
+            6.8
+        )
 
         c.drawString(
-            x + 6 * mm,
-            y + 14 * mm,
+            x + 5*mm,
+            y + 14*mm,
             label
         )
 
         c.setFillColor(DARK)
-        c.setFont("Helvetica-Bold", 13)
+        c.setFont(
+            "Helvetica-Bold",
+            12.5
+        )
 
         c.drawString(
-            x + 6 * mm,
-            y + 5 * mm,
+            x + 5*mm,
+            y + 5*mm,
             value
         )
 
-    # grafico
     draw_chart_monthly(
         c,
-        18 * mm,
-        63 * mm,
-        PAGE_W - 36 * mm,
-        82 * mm,
+        18*mm,
+        57*mm,
+        PAGE_W - 36*mm,
+        78*mm,
         monthly
     )
 
     c.setFillColor(GREY)
-    c.setFont("Helvetica", 7.5)
 
-    c.drawString(
-        18 * mm,
-        53 * mm,
-        "Produzione annuale stimata da PVGIS sulla base dei dati di localizzazione e configurazione inseriti."
+    c.setFont(
+        "Helvetica",
+        7
     )
 
-    draw_footer(c, 2)
+    c.drawString(
+        18*mm,
+        48*mm,
+        "Produzione stimata tramite PVGIS sulla base della localizzazione e dei parametri inseriti."
+    )
+
+    draw_footer(
+        c,
+        2
+    )
 
     c.showPage()
 
     # =====================================================
-    # PAGINA 3 - AUTOCONSUMO
+    # PAGINA 3
     # =====================================================
 
     draw_header(
@@ -1239,162 +1430,180 @@ def generate_pdf():
 
     draw_section_title(
         c,
-        18 * mm,
-        PAGE_H - 38 * mm,
         "Dove finisce l'energia prodotta?",
-        "La simulazione distingue l'energia utilizzata direttamente da quella immessa in rete."
+        "La simulazione distingue l'energia utilizzata direttamente dall'abitazione da quella immessa in rete.",
+        PAGE_H - 38*mm
     )
 
-    # donut
     draw_donut(
         c,
-        72 * mm,
-        PAGE_H - 100 * mm,
-        35 * mm,
+        68*mm,
+        PAGE_H - 100*mm,
+        33*mm,
         values["self_used"],
         values["export"]
     )
 
     # legenda
     c.setFillColor(GREEN)
+
     c.rect(
-        125 * mm,
-        PAGE_H - 87 * mm,
-        7 * mm,
-        7 * mm,
+        120*mm,
+        PAGE_H - 88*mm,
+        7*mm,
+        7*mm,
         fill=1,
         stroke=0
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 9)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
 
     c.drawString(
-        136 * mm,
-        PAGE_H - 85 * mm,
+        132*mm,
+        PAGE_H - 86*mm,
         "Autoconsumo"
     )
 
-    c.setFont("Helvetica", 8)
     c.setFillColor(GREY)
 
+    c.setFont(
+        "Helvetica",
+        8
+    )
+
     c.drawString(
-        136 * mm,
-        PAGE_H - 94 * mm,
+        132*mm,
+        PAGE_H - 95*mm,
         f"{number(values['self_used'])} kWh/anno"
     )
 
     c.setFillColor(YELLOW)
+
     c.rect(
-        125 * mm,
-        PAGE_H - 108 * mm,
-        7 * mm,
-        7 * mm,
+        120*mm,
+        PAGE_H - 108*mm,
+        7*mm,
+        7*mm,
         fill=1,
         stroke=0
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 9)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
 
     c.drawString(
-        136 * mm,
-        PAGE_H - 106 * mm,
+        132*mm,
+        PAGE_H - 106*mm,
         "Energia immessa"
     )
 
-    c.setFont("Helvetica", 8)
     c.setFillColor(GREY)
 
+    c.setFont(
+        "Helvetica",
+        8
+    )
+
     c.drawString(
-        136 * mm,
-        PAGE_H - 115 * mm,
+        132*mm,
+        PAGE_H - 115*mm,
         f"{number(values['export'])} kWh/anno"
     )
 
     # KPI
-    kpi_y = 91 * mm
-
     draw_kpi(
         c,
-        18 * mm,
-        kpi_y,
-        53 * mm,
-        25 * mm,
+        18*mm,
+        91*mm,
+        53*mm,
+        25*mm,
         "A",
         "Autoconsumo",
-        f"{values['self_used'] / max(production, 1) * 100:.0f}%",
+        f"{values['self_used']/max(production,1)*100:.0f}%",
         GREEN
     )
 
     draw_kpi(
         c,
-        78 * mm,
-        kpi_y,
-        53 * mm,
-        25 * mm,
+        78*mm,
+        91*mm,
+        53*mm,
+        25*mm,
         "I",
         "Energia immessa",
-        f"{values['export'] / max(production, 1) * 100:.0f}%",
+        f"{values['export']/max(production,1)*100:.0f}%",
         YELLOW
     )
 
     draw_kpi(
         c,
-        138 * mm,
-        kpi_y,
-        53 * mm,
-        25 * mm,
-        "R",
+        138*mm,
+        91*mm,
+        53*mm,
+        25*mm,
+        "€",
         "Risparmio annuo",
         euro(values["annual_saving"]),
         GREEN
     )
 
-    # box spiegazione
+    # box
     draw_round_rect(
         c,
-        18 * mm,
-        45 * mm,
-        PAGE_W - 36 * mm,
-        35 * mm,
+        18*mm,
+        45*mm,
+        PAGE_W - 36*mm,
+        35*mm,
         LIGHT_GREEN,
         None,
-        8
+        7
     )
 
     c.setFillColor(DARK_GREEN)
-    c.setFont("Helvetica-Bold", 10)
+
+    c.setFont(
+        "Helvetica-Bold",
+        10
+    )
 
     c.drawString(
-        27 * mm,
-        70 * mm,
+        27*mm,
+        70*mm,
         "Cosa significa?"
     )
 
-    c.setFillColor(DARK)
-    c.setFont("Helvetica", 8)
+    draw_wrapped_text(
+        c,
+        "Una parte dell'energia prodotta viene utilizzata direttamente "
+        "dall'abitazione. La parte non utilizzata viene immessa in rete "
+        "e valorizzata secondo il valore inserito nella simulazione.",
+        27*mm,
+        62*mm,
+        PAGE_W - 54*mm,
+        "Helvetica",
+        8,
+        10,
+        DARK
+    )
 
-    text_lines = [
-        "Una parte dell'energia prodotta viene utilizzata direttamente dall'abitazione.",
-        "La parte non utilizzata viene immessa in rete e valorizzata secondo il valore",
-        "inserito nella simulazione."
-    ]
-
-    for i, line in enumerate(text_lines):
-
-        c.drawString(
-            27 * mm,
-            61 * mm - i * 9,
-            line
-        )
-
-    draw_footer(c, 3)
+    draw_footer(
+        c,
+        3
+    )
 
     c.showPage()
 
     # =====================================================
-    # PAGINA 4 - RITORNO INVESTIMENTO
+    # PAGINA 4
     # =====================================================
 
     draw_header(
@@ -1405,13 +1614,12 @@ def generate_pdf():
 
     draw_section_title(
         c,
-        18 * mm,
-        PAGE_H - 38 * mm,
         "I numeri principali",
-        "Una sintesi immediata del risultato economico della simulazione."
+        "Una sintesi immediata del risultato economico della simulazione.",
+        PAGE_H - 38*mm
     )
 
-    payback_text = (
+    payback = (
         f"{values['payback']:.1f} anni"
         if values["payback"] is not None
         else "Oltre 25 anni"
@@ -1419,10 +1627,10 @@ def generate_pdf():
 
     draw_kpi(
         c,
-        18 * mm,
-        PAGE_H - 85 * mm,
-        55 * mm,
-        30 * mm,
+        18*mm,
+        PAGE_H - 85*mm,
+        55*mm,
+        29*mm,
         "€",
         "Investimento netto",
         euro(values["net_cost"]),
@@ -1431,134 +1639,155 @@ def generate_pdf():
 
     draw_kpi(
         c,
-        77 * mm,
-        PAGE_H - 85 * mm,
-        55 * mm,
-        30 * mm,
+        77*mm,
+        PAGE_H - 85*mm,
+        55*mm,
+        29*mm,
         "T",
         "Rientro stimato",
-        payback_text,
+        payback,
         YELLOW
     )
 
     draw_kpi(
         c,
-        136 * mm,
-        PAGE_H - 85 * mm,
-        55 * mm,
-        30 * mm,
+        136*mm,
+        PAGE_H - 85*mm,
+        55*mm,
+        29*mm,
         "€",
         "Beneficio 25 anni",
         euro(values["gross_25"]),
         GREEN
     )
 
-    # confronto investimento / detrazione
+    # investimento
     draw_round_rect(
         c,
-        18 * mm,
-        96 * mm,
-        PAGE_W - 36 * mm,
-        35 * mm,
+        18*mm,
+        97*mm,
+        PAGE_W - 36*mm,
+        34*mm,
         WHITE,
         MID_GREY,
-        8
+        7
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 10)
+
+    c.setFont(
+        "Helvetica-Bold",
+        10
+    )
 
     c.drawString(
-        27 * mm,
-        120 * mm,
+        27*mm,
+        120*mm,
         "Composizione dell'investimento"
     )
 
+    c.setFont(
+        "Helvetica",
+        8
+    )
+
     c.setFillColor(GREY)
-    c.setFont("Helvetica", 8)
 
     c.drawString(
-        27 * mm,
-        109 * mm,
+        27*mm,
+        109*mm,
         "Costo complessivo"
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 9)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
 
     c.drawRightString(
-        105 * mm,
-        109 * mm,
+        102*mm,
+        109*mm,
         euro(cost)
     )
 
     c.setFillColor(GREY)
-    c.setFont("Helvetica", 8)
+
+    c.setFont(
+        "Helvetica",
+        8
+    )
 
     c.drawString(
-        115 * mm,
-        109 * mm,
-        "Detrazione"
+        115*mm,
+        109*mm,
+        "Detrazione totale"
     )
 
     c.setFillColor(GREEN)
-    c.setFont("Helvetica-Bold", 9)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
 
     c.drawRightString(
-        185 * mm,
-        109 * mm,
+        185*mm,
+        109*mm,
         euro(deduction)
     )
 
-    # beneficio netto
+    # barra detrazione
     c.setFillColor(LIGHT_GREEN)
 
     c.roundRect(
-        27 * mm,
-        100 * mm,
-        158 * mm,
-        5 * mm,
+        27*mm,
+        101*mm,
+        158*mm,
+        4*mm,
         2,
         fill=1,
         stroke=0
     )
 
-    # barra
     if cost > 0:
 
         deduction_width = min(
-            158,
-            158 * deduction / cost
+            158*mm,
+            158*mm*deduction/cost
         )
 
         c.setFillColor(GREEN)
 
         c.roundRect(
-            27 * mm,
-            100 * mm,
+            27*mm,
+            101*mm,
             deduction_width,
-            5 * mm,
+            4*mm,
             2,
             fill=1,
             stroke=0
         )
 
-    # grafico economico
     draw_economic_chart(
         c,
-        18 * mm,
-        25 * mm,
-        PAGE_W - 36 * mm,
-        63 * mm,
+        18*mm,
+        25*mm,
+        PAGE_W - 36*mm,
+        63*mm,
         values["years"]
     )
 
-    draw_footer(c, 4)
+    draw_footer(
+        c,
+        4
+    )
 
     c.showPage()
 
     # =====================================================
-    # PAGINA 5 - PROIEZIONE 25 ANNI
+    # PAGINA 5
     # =====================================================
 
     draw_header(
@@ -1569,142 +1798,172 @@ def generate_pdf():
 
     draw_section_title(
         c,
-        18 * mm,
-        PAGE_H - 38 * mm,
         "Come evolve il beneficio nel tempo",
-        "La simulazione considera un degrado della produzione dello 0,5% annuo e una crescita del prezzo dell'energia del 2% annuo."
+        "La simulazione considera un degrado della produzione dello 0,5% annuo e una crescita del prezzo dell'energia del 2% annuo.",
+        PAGE_H - 38*mm
     )
 
     # tabella
-    table_x = 18 * mm
-    table_y = PAGE_H - 80 * mm
+    x = 18*mm
+    y = PAGE_H - 78*mm
+    table_w = PAGE_W - 36*mm
+    row_h = 10*mm
 
-    col_widths = [
-        25 * mm,
-        45 * mm,
-        55 * mm
-    ]
-
-    headers = [
-        "Periodo",
-        "Beneficio annuo",
-        "Beneficio cumulato"
-    ]
+    col1 = 35*mm
+    col2 = 58*mm
+    col3 = table_w - col1 - col2
 
     c.setFillColor(GREEN)
+
     c.roundRect(
-        table_x,
-        table_y,
-        sum(col_widths),
-        10 * mm,
+        x,
+        y,
+        table_w,
+        row_h,
         3,
         fill=1,
         stroke=0
     )
 
     c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", 8)
 
-    xx = table_x
+    c.setFont(
+        "Helvetica-Bold",
+        8
+    )
 
-    for i, header in enumerate(headers):
+    c.drawString(
+        x + 5*mm,
+        y + 3.5*mm,
+        "Periodo"
+    )
 
-        c.drawString(
-            xx + 4 * mm,
-            table_y + 3.5 * mm,
-            header
+    c.drawString(
+        x + col1 + 5*mm,
+        y + 3.5*mm,
+        "Beneficio annuo"
+    )
+
+    c.drawString(
+        x + col1 + col2 + 5*mm,
+        y + 3.5*mm,
+        "Beneficio cumulato"
+    )
+
+    for i, year_number in enumerate(
+        [1, 5, 10, 15, 20, 25]
+    ):
+
+        item = values["years"][year_number-1]
+
+        row_y = y - (i+1)*row_h
+
+        c.setFillColor(
+            LIGHT_GREY
+            if i % 2 == 0
+            else WHITE
         )
 
-        xx += col_widths[i]
-
-    selected_years = [1, 5, 10, 15, 20, 25]
-
-    row_y = table_y - 9 * mm
-
-    for index, year_number in enumerate(selected_years):
-
-        item = values["years"][year_number - 1]
-
-        if index % 2 == 0:
-            c.setFillColor(LIGHT_GREY)
-        else:
-            c.setFillColor(WHITE)
-
         c.rect(
-            table_x,
+            x,
             row_y,
-            sum(col_widths),
-            9 * mm,
+            table_w,
+            row_h,
             fill=1,
             stroke=0
         )
 
         c.setFillColor(DARK)
-        c.setFont("Helvetica-Bold", 8)
+
+        c.setFont(
+            "Helvetica-Bold",
+            8
+        )
 
         c.drawString(
-            table_x + 4 * mm,
-            row_y + 3 * mm,
+            x + 5*mm,
+            row_y + 3.5*mm,
             f"{year_number}° anno"
         )
 
         c.drawString(
-            table_x + col_widths[0] + 4 * mm,
-            row_y + 3 * mm,
+            x + col1 + 5*mm,
+            row_y + 3.5*mm,
             euro(item["benefit"])
         )
 
         c.setFillColor(GREEN)
+
         c.drawString(
-            table_x + col_widths[0] + col_widths[1] + 4 * mm,
-            row_y + 3 * mm,
+            x + col1 + col2 + 5*mm,
+            row_y + 3.5*mm,
             euro(item["cumulative"])
         )
 
-        row_y -= 9 * mm
-
-    # box finale
+    # box 25 anni
     draw_round_rect(
         c,
-        18 * mm,
-        72 * mm,
-        PAGE_W - 36 * mm,
-        32 * mm,
+        18*mm,
+        70*mm,
+        PAGE_W - 36*mm,
+        34*mm,
         LIGHT_GREEN,
         None,
-        8
+        7
     )
 
     c.setFillColor(DARK_GREEN)
-    c.setFont("Helvetica-Bold", 11)
+
+    c.setFont(
+        "Helvetica-Bold",
+        10
+    )
 
     c.drawString(
-        27 * mm,
-        91 * mm,
+        27*mm,
+        91*mm,
         "Beneficio cumulato stimato a 25 anni"
     )
 
     c.setFillColor(GREEN)
-    c.setFont("Helvetica-Bold", 21)
+
+    c.setFont(
+        "Helvetica-Bold",
+        20
+    )
 
     c.drawString(
-        27 * mm,
-        79 * mm,
+        27*mm,
+        78*mm,
         euro(values["gross_25"])
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica", 8)
+
+    c.setFont(
+        "Helvetica",
+        8
+    )
 
     c.drawRightString(
-        PAGE_W - 27 * mm,
-        82 * mm,
-        f"Beneficio netto dopo l'investimento: {euro(values['net_25'])}"
+        PAGE_W - 27*mm,
+        81*mm,
+        "Beneficio netto: " + euro(values["net_25"])
     )
 
     # assunzioni
-    c.setFillColor(GREY)
-    c.setFont("Helvetica", 7)
+    c.setFillColor(DARK)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
+
+    c.drawString(
+        18*mm,
+        59*mm,
+        "Assunzioni della simulazione"
+    )
 
     assumptions = [
         "Degrado produzione: 0,5% annuo",
@@ -1714,168 +1973,207 @@ def generate_pdf():
         f"Profilo consumi: {profile_label}"
     ]
 
-    yy = 57 * mm
+    yy = 52*mm
 
-    for line in assumptions:
+    for text in assumptions:
 
-        c.drawString(
-            18 * mm,
-            yy,
-            "• " + line
+        c.setFillColor(GREY)
+
+        c.setFont(
+            "Helvetica",
+            7
         )
 
-        yy -= 5 * mm
+        c.drawString(
+            18*mm,
+            yy,
+            "• " + text
+        )
 
-    draw_footer(c, 5)
+        yy -= 5*mm
+
+    draw_footer(
+        c,
+        5
+    )
 
     c.showPage()
 
     # =====================================================
-    # PAGINA 6 - COSA COMPRENDE
+    # PAGINA 6
     # =====================================================
 
     draw_header(
         c,
         "Cosa comprende la soluzione",
-        "Servizi, assistenza e garanzie"
+        "Servizi e garanzie"
     )
 
     draw_section_title(
         c,
-        18 * mm,
-        PAGE_H - 38 * mm,
-        "Un progetto completo, dalla progettazione al monitoraggio",
-        "L'obiettivo è accompagnarti in tutte le fasi della realizzazione."
+        "Un progetto completo",
+        "Dalla progettazione al monitoraggio dell'impianto.",
+        PAGE_H - 38*mm
     )
 
     services = [
-        ("FV", "Impianto fotovoltaico", "Pannelli e componentistica dimensionati sul progetto."),
-        ("BA", "Accumulo energetico", "Sistema di batterie per aumentare l'utilizzo dell'energia prodotta."),
-        ("PR", "Progettazione", "Analisi tecnica e dimensionamento dell'impianto."),
-        ("IN", "Installazione", "Installazione e messa in servizio dell'impianto."),
-        ("GS", "Pratiche GSE", "Gestione delle pratiche necessarie."),
-        ("AP", "Monitoraggio App", "Controllo della produzione e dei consumi."),
+        (
+            "FV",
+            "Impianto fotovoltaico",
+            "Pannelli e componentistica dimensionati sul progetto."
+        ),
+        (
+            "BA",
+            "Accumulo energetico",
+            "Batterie per aumentare l'utilizzo dell'energia prodotta."
+        ),
+        (
+            "PR",
+            "Progettazione",
+            "Analisi tecnica e dimensionamento dell'impianto."
+        ),
+        (
+            "IN",
+            "Installazione",
+            "Installazione e messa in servizio dell'impianto."
+        ),
+        (
+            "GS",
+            "Pratiche GSE",
+            "Gestione delle pratiche necessarie."
+        ),
+        (
+            "AP",
+            "Monitoraggio",
+            "Controllo di produzione e consumi."
+        )
     ]
 
-    start_y = PAGE_H - 72 * mm
+    card_w = 82*mm
+    card_h = 34*mm
 
     for i, (icon, title, text) in enumerate(services):
 
         col = i % 2
         row = i // 2
 
-        x = 18 * mm + col * 88 * mm
-        y = start_y - row * 42 * mm
+        x = 18*mm + col*88*mm
+        y = PAGE_H - 72*mm - row*40*mm
 
         draw_round_rect(
             c,
             x,
             y,
-            82 * mm,
-            34 * mm,
+            card_w,
+            card_h,
             WHITE,
             MID_GREY,
-            8
+            7
         )
 
         c.setFillColor(GREEN)
+
         c.circle(
-            x + 13 * mm,
-            y + 23 * mm,
-            8 * mm,
+            x + 12*mm,
+            y + 24*mm,
+            7*mm,
             fill=1,
             stroke=0
         )
 
         c.setFillColor(WHITE)
-        c.setFont("Helvetica-Bold", 7)
+
+        c.setFont(
+            "Helvetica-Bold",
+            7
+        )
 
         c.drawCentredString(
-            x + 13 * mm,
-            y + 21 * mm,
+            x + 12*mm,
+            y + 22*mm,
             icon
         )
 
         c.setFillColor(DARK)
-        c.setFont("Helvetica-Bold", 9)
+
+        c.setFont(
+            "Helvetica-Bold",
+            8.5
+        )
 
         c.drawString(
-            x + 25 * mm,
-            y + 24 * mm,
+            x + 23*mm,
+            y + 26*mm,
             title
         )
 
-        c.setFillColor(GREY)
-        c.setFont("Helvetica", 7)
-
-        # testo su due righe
-        words = text.split()
-        line1 = ""
-        line2 = ""
-
-        for word in words:
-
-            if stringWidth(
-                line1 + " " + word,
-                "Helvetica",
-                7
-            ) < 48 * mm:
-                line1 += (" " if line1 else "") + word
-            else:
-                line2 += (" " if line2 else "") + word
-
-        c.drawString(
-            x + 25 * mm,
-            y + 14 * mm,
-            line1
-        )
-
-        c.drawString(
-            x + 25 * mm,
-            y + 7 * mm,
-            line2
+        draw_wrapped_text(
+            c,
+            text,
+            x + 23*mm,
+            y + 16*mm,
+            card_w - 29*mm,
+            "Helvetica",
+            6.8,
+            9,
+            GREY,
+            3
         )
 
     # garanzie
     draw_round_rect(
         c,
-        18 * mm,
-        37 * mm,
-        PAGE_W - 36 * mm,
-        30 * mm,
+        18*mm,
+        35*mm,
+        PAGE_W - 36*mm,
+        30*mm,
         LIGHT_YELLOW,
         None,
-        8
+        7
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 10)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
 
     c.drawString(
-        27 * mm,
-        57 * mm,
+        27*mm,
+        56*mm,
         "Garanzie indicative della soluzione"
     )
 
     guarantees = [
-        "Pannelli: garanzia prodotto fino a 25 anni",
-        "Potenza pannelli: garanzia prestazionale fino a 30 anni",
+        "Pannelli: prodotto fino a 25 anni",
+        "Pannelli: prestazione fino a 30 anni",
         "Inverter: garanzia fino a 12 anni",
         "Batterie: garanzia fino a 11 anni"
     ]
 
-    for i, item in enumerate(guarantees):
+    for i, text in enumerate(guarantees):
+
+        col = i % 2
+        row = i // 2
 
         c.setFillColor(DARK)
-        c.setFont("Helvetica", 7.5)
 
-        c.drawString(
-            27 * mm + (i % 2) * 80 * mm,
-            47 * mm - (i // 2) * 9 * mm,
-            "✓ " + item
+        c.setFont(
+            "Helvetica",
+            7
         )
 
-    draw_footer(c, 6)
+        c.drawString(
+            27*mm + col*78*mm,
+            47*mm - row*9*mm,
+            "✓ " + text
+        )
+
+    draw_footer(
+        c,
+        6
+    )
 
     c.showPage()
 
@@ -1884,6 +2182,7 @@ def generate_pdf():
     # =====================================================
 
     c.setFillColor(GREEN)
+
     c.rect(
         0,
         0,
@@ -1895,137 +2194,167 @@ def generate_pdf():
 
     # decorazione
     c.setFillColor(DARK_GREEN)
+
     c.circle(
-        PAGE_W + 15 * mm,
-        PAGE_H - 20 * mm,
-        65 * mm,
+        PAGE_W + 15*mm,
+        PAGE_H - 15*mm,
+        65*mm,
         fill=1,
         stroke=0
     )
 
     draw_sun(
         c,
-        PAGE_W - 45 * mm,
-        PAGE_H - 42 * mm,
+        PAGE_W - 45*mm,
+        PAGE_H - 40*mm,
         22
     )
 
     c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", 25)
+
+    c.setFont(
+        "Helvetica-Bold",
+        25
+    )
 
     c.drawString(
-        20 * mm,
-        PAGE_H - 50 * mm,
+        20*mm,
+        PAGE_H - 48*mm,
         "La tua energia."
     )
 
     c.drawString(
-        20 * mm,
-        PAGE_H - 63 * mm,
+        20*mm,
+        PAGE_H - 62*mm,
         "Il tuo risparmio."
     )
 
-    c.setFont("Helvetica", 10)
-
-    c.drawString(
-        20 * mm,
-        PAGE_H - 79 * mm,
-        "Per informazioni, approfondimenti e un'analisi personalizzata"
+    c.setFont(
+        "Helvetica",
+        9
     )
 
-    # contatto
+    c.drawString(
+        20*mm,
+        PAGE_H - 77*mm,
+        "Per informazioni e un'analisi personalizzata."
+    )
+
+    # scheda contatto
     draw_round_rect(
         c,
-        20 * mm,
-        72 * mm,
-        PAGE_W - 40 * mm,
-        65 * mm,
+        20*mm,
+        72*mm,
+        PAGE_W - 40*mm,
+        64*mm,
         WHITE,
         None,
-        10
+        9
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 17)
+
+    c.setFont(
+        "Helvetica-Bold",
+        17
+    )
 
     c.drawString(
-        30 * mm,
-        121 * mm,
+        30*mm,
+        119*mm,
         "Simone Alfarano"
     )
 
     c.setFillColor(GREEN)
-    c.setFont("Helvetica-Bold", 9)
+
+    c.setFont(
+        "Helvetica-Bold",
+        8.5
+    )
 
     c.drawString(
-        30 * mm,
-        111 * mm,
+        30*mm,
+        109*mm,
         "RESPONSABILE COMMERCIALE"
     )
 
     c.setFillColor(GREY)
-    c.setFont("Helvetica", 8.5)
 
-    contact_lines = [
+    c.setFont(
+        "Helvetica",
+        8
+    )
+
+    lines = [
         "Energia Giusta",
         "Partner ENI Plenitude",
-        "",
         "Tel. / WhatsApp: 351.7478652",
         "Email: simone.alfarano@energiagiusta.it",
         "Sito: www.energiagiusta.it"
     ]
 
-    yy = 99 * mm
+    yy = 98*mm
 
-    for line in contact_lines:
+    for line in lines:
 
         c.drawString(
-            30 * mm,
+            30*mm,
             yy,
             line
         )
 
-        yy -= 7 * mm
+        yy -= 7*mm
 
-    # call to action
+    # CTA
     c.setFillColor(YELLOW)
+
     c.roundRect(
-        30 * mm,
-        48 * mm,
-        65 * mm,
-        13 * mm,
+        30*mm,
+        48*mm,
+        65*mm,
+        13*mm,
         6,
         fill=1,
         stroke=0
     )
 
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 9)
+
+    c.setFont(
+        "Helvetica-Bold",
+        9
+    )
 
     c.drawCentredString(
-        62.5 * mm,
-        52.5 * mm,
+        62.5*mm,
+        52.5*mm,
         "CONTATTAMI PER INFO"
     )
 
+    # disclaimer
     c.setFillColor(WHITE)
-    c.setFont("Helvetica", 7)
 
-    c.drawString(
-        20 * mm,
-        18 * mm,
-        "Stima commerciale. Il risultato dipende da tariffe, profilo reale dei consumi,"
+    c.setFont(
+        "Helvetica",
+        6.5
     )
 
-    c.drawString(
-        20 * mm,
-        13 * mm,
-        "condizioni di scambio/ritiro, ombreggiamento e altri fattori."
+    draw_wrapped_text(
+        c,
+        "Stima commerciale. Il risultato dipende da tariffe, profilo reale "
+        "dei consumi, condizioni di scambio/ritiro, ombreggiamento e altri fattori.",
+        20*mm,
+        20*mm,
+        115*mm,
+        "Helvetica",
+        6.5,
+        8,
+        WHITE
     )
 
     c.drawRightString(
-        PAGE_W - 20 * mm,
-        13 * mm,
+        PAGE_W - 20*mm,
+        13*mm,
         "Non è un preventivo finanziario."
     )
 
@@ -2035,15 +2364,11 @@ def generate_pdf():
 
     buffer.seek(0)
 
-    filename = (
-        "Analisi_Fotovoltaica_Energia_Giusta.pdf"
-    )
-
     return send_file(
         buffer,
         mimetype="application/pdf",
         as_attachment=True,
-        download_name=filename
+        download_name="Analisi_Fotovoltaica_Energia_Giusta.pdf"
     )
 
 
@@ -2052,6 +2377,7 @@ def generate_pdf():
 # =========================================================
 
 if __name__ == "__main__":
+
     app.run(
         host="127.0.0.1",
         port=5000,
