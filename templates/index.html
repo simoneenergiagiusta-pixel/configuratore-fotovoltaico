@@ -217,111 +217,109 @@ async function calculate(){
     }).join("");
 
 
-    result.innerHTML = `
+  result.innerHTML = `
 
-      <div class="kpis">
+  <div class="results-section">
 
-        <div>
-          <small>Produzione</small>
-          <b>${annualProduction.toFixed(0)} kWh</b>
-        </div>
+    <h3>📊 RISULTATO DELLA SIMULAZIONE</h3>
 
-        <div>
-          <small>Autoconsumo stimato</small>
-          <b>${d.self_used.toFixed(0)} kWh</b>
-        </div>
+    <div class="kpis">
 
-        <div>
-          <small>Energia immessa</small>
-          <b>${d.export.toFixed(0)} kWh</b>
-        </div>
-
-        <div>
-          <small>Risparmio annuo</small>
-          <b>${formatEuro(d.annual_saving)}</b>
-        </div>
-
-        <div>
-          <small>Investimento netto</small>
-          <b>${formatEuro(d.net_cost)}</b>
-        </div>
-
-        <div>
-          <small>Payback indicativo</small>
-          <b>${payback}</b>
-        </div>
-
+      <div class="kpi">
+        <small>☀️ Produzione annua</small>
+        <b>${annualProduction.toFixed(0)} kWh</b>
       </div>
 
-
-      <div class="projection">
-
-        <h3>📈 PROIEZIONE ECONOMICA</h3>
-
-        <p>
-          Stima del beneficio economico cumulato nel tempo,
-          considerando un degrado della produzione dello 0,5% annuo.
-        </p>
-
-        <table class="projection-table">
-
-          <thead>
-            <tr>
-              <th>Periodo</th>
-              <th>Beneficio dell'anno</th>
-              <th>Beneficio cumulato</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            ${rows}
-          </tbody>
-
-        </table>
-
+      <div class="kpi">
+        <small>🏠 Autoconsumo stimato</small>
+        <b>${d.self_used.toFixed(0)} kWh</b>
       </div>
 
-
-      <div class="summary">
-
-        <div>
-          <span>💶 Investimento netto</span>
-          <strong>${formatEuro(d.net_cost)}</strong>
-        </div>
-
-        <div>
-          <span>⏱️ Rientro stimato</span>
-          <strong>${payback}</strong>
-        </div>
-
-        <div>
-          <span>📊 Beneficio cumulato a 25 anni</span>
-          <strong>
-            ${formatEuro(
-              d.years.length
-              ? Math.max(0,d.years[d.years.length-1].cumulative)
-              : 0
-            )}
-          </strong>
-        </div>
-
+      <div class="kpi">
+        <small>⚡ Energia immessa</small>
+        <b>${d.export.toFixed(0)} kWh</b>
       </div>
 
+      <div class="kpi highlight">
+        <small>💰 Risparmio annuo</small>
+        <b>${formatEuro(d.annual_saving)}</b>
+      </div>
 
-      <p class="note">
+    </div>
 
-        Stima commerciale: il risultato dipende da tariffe,
-        profilo reale dei consumi, condizioni di scambio/ritiro,
-        ombreggiamento e altri fattori.
 
-        <br><br>
+    <h3 class="economic-title">💶 RISULTATO ECONOMICO</h3>
 
-        Non è un preventivo finanziario.
+    <div class="summary">
 
-      </p>
-    `;
+      <div>
+        <span>Investimento netto</span>
+        <strong>${formatEuro(d.net_cost)}</strong>
+      </div>
 
-  } catch(e) {
+      <div>
+        <span>Rientro stimato</span>
+        <strong>${payback}</strong>
+      </div>
+
+      <div>
+        <span>Beneficio cumulato a 25 anni</span>
+        <strong>
+          ${formatEuro(
+            d.years.length
+            ? Math.max(0,d.years[d.years.length-1].cumulative)
+            : 0
+          )}
+        </strong>
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <div class="projection">
+
+    <h3>📈 PROIEZIONE ECONOMICA</h3>
+
+    <p>
+      Stima del beneficio economico cumulato nel tempo,
+      considerando un degrado della produzione dello 0,5% annuo.
+    </p>
+
+    <table class="projection-table">
+
+      <thead>
+        <tr>
+          <th>Periodo</th>
+          <th>Beneficio dell'anno</th>
+          <th>Beneficio cumulato</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        ${rows}
+      </tbody>
+
+    </table>
+
+  </div>
+
+
+  <p class="note">
+
+    Stima commerciale: il risultato dipende da tariffe,
+    profilo reale dei consumi, condizioni di scambio/ritiro,
+    ombreggiamento e altri fattori.
+
+    <br><br>
+
+    Non è un preventivo finanziario.
+
+  </p>
+
+`;
+      } catch(e) {
 
     result.innerHTML =
       "<b>Errore nel calcolo.</b><br>" +
