@@ -7,7 +7,7 @@ import math
 from datetime import datetime
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
@@ -17,14 +17,10 @@ from reportlab.platypus import (
     Spacer,
     Table,
     TableStyle,
-    PageBreak,
-    KeepTogether
+    PageBreak
 )
 from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.graphics.charts.linecharts import HorizontalLineChart
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfbase import pdfmetrics
 
 
 app = Flask(__name__)
@@ -65,23 +61,12 @@ def api_pvgis():
     d = request.get_json(force=True)
 
     params = {
-
         "lat": float(d["lat"]),
         "lon": float(d["lon"]),
         "peakpower": float(d["kwp"]),
-
-        "loss": float(
-            d.get("loss", 14)
-        ),
-
-        "angle": float(
-            d.get("angle", 30)
-        ),
-
-        "aspect": float(
-            d.get("aspect", 0)
-        ),
-
+        "loss": float(d.get("loss", 14)),
+        "angle": float(d.get("angle", 30)),
+        "aspect": float(d.get("aspect", 0)),
         "usehorizon": 1,
         "outputformat": "json",
     }
@@ -89,7 +74,6 @@ def api_pvgis():
     data = pvgis(params)
 
     fixed = data["outputs"]["monthly"]["fixed"]
-
     yearly = data["outputs"]["totals"]["fixed"]
 
     monthly = [
@@ -98,13 +82,9 @@ def api_pvgis():
     ]
 
     return jsonify({
-
         "annual_kwh": yearly["E_y"],
-
         "monthly_kwh": monthly,
-
         "raw": data
-
     })
 
 
@@ -147,7 +127,6 @@ def calculate_values(d):
         "equilibrato"
     )
 
-
     # -----------------------------------------------------
     # MODELLO DI AUTOCONSUMO
     # -----------------------------------------------------
@@ -165,235 +144,129 @@ def calculate_values(d):
         0.40
     )
 
-
     battery_boost = min(
-
         0.25,
-
         battery / 30.0
-
     )
-
 
     self_consumption_pct = min(
-
         0.95,
-
         direct_pct + battery_boost
-
     )
-
 
     self_used = min(
-
-        production *
-        self_consumption_pct,
-
+        production * self_consumption_pct,
         consumption
-
     )
-
 
     export = max(
-
         0,
-
         production - self_used
-
     )
-
 
     grid = max(
-
         0,
-
         consumption - self_used
-
     )
-
 
     annual_saving = (
-
         self_used * price
-
         +
-
-        export *
-        export_price
-
+        export * export_price
     )
-
 
     net_cost = max(
-
         0,
-
         cost - deduction
-
     )
-
 
     # -----------------------------------------------------
     # PROIEZIONE 25 ANNI
     # -----------------------------------------------------
 
     degradation = 0.005
-
     energy_price_growth = 0.02
 
     years = []
-
     cumulative_benefit = 0
-
     payback = None
-
 
     for y in range(1, 26):
 
         production_y = (
-
             production *
-
-            (
-                (1 - degradation)
-                ** (y - 1)
-            )
-
+            ((1 - degradation) ** (y - 1))
         )
-
 
         self_used_y = min(
-
-            production_y *
-            self_consumption_pct,
-
+            production_y * self_consumption_pct,
             consumption
-
         )
-
 
         export_y = max(
-
             0,
-
-            production_y -
-            self_used_y
-
+            production_y - self_used_y
         )
-
 
         energy_price_y = (
-
             price *
-
-            (
-                (1 + energy_price_growth)
-                ** (y - 1)
-            )
-
+            ((1 + energy_price_growth) ** (y - 1))
         )
-
 
         benefit = (
-
-            self_used_y *
-            energy_price_y
-
+            self_used_y * energy_price_y
             +
-
-            export_y *
-            export_price
-
+            export_y * export_price
         )
-
 
         cumulative_benefit += benefit
 
-
         if (
-
             payback is None
-
-            and
-
-            cumulative_benefit >=
-            net_cost
-
+            and cumulative_benefit >= net_cost
         ):
-
             payback = y
 
-
         years.append({
-
             "year": y,
-
             "benefit": benefit,
-
-            "cumulative":
-                cumulative_benefit,
-
-            "production":
-                production_y,
-
-            "self_used":
-                self_used_y,
-
-            "export":
-                export_y,
-
-            "energy_price":
-                energy_price_y
-
+            "cumulative": cumulative_benefit,
+            "production": production_y,
+            "self_used": self_used_y,
+            "export": export_y,
+            "energy_price": energy_price_y
         })
 
-
     gross_25 = (
-
         years[-1]["cumulative"]
         if years
         else 0
-
     )
-
 
     net_25 = max(
-
         0,
-
         gross_25 - net_cost
-
     )
-
 
     return {
 
-        "self_used":
-            self_used,
+        "self_used": self_used,
 
-        "export":
-            export,
+        "export": export,
 
-        "grid_purchase":
-            grid,
+        "grid_purchase": grid,
 
-        "annual_saving":
-            annual_saving,
+        "annual_saving": annual_saving,
 
-        "net_cost":
-            net_cost,
+        "net_cost": net_cost,
 
-        "payback":
-            payback,
+        "payback": payback,
 
-        "years":
-            years,
+        "years": years,
 
-        "gross_25":
-            gross_25,
+        "gross_25": gross_25,
 
-        "net_25":
-            net_25
+        "net_25": net_25
 
     }
 
@@ -411,7 +284,7 @@ def calculate():
 
 
 # =========================================================
-# FUNZIONI GRAFICHE PDF
+# COLORI PDF
 # =========================================================
 
 GREEN = colors.HexColor("#15803D")
@@ -429,35 +302,36 @@ MID_GREY = colors.HexColor("#D1D5DB")
 WHITE = colors.white
 
 
+# =========================================================
+# FUNZIONI FORMATO
+# =========================================================
+
 def euro(value):
 
     return "€ {:,.0f}".format(
         value
-    ).replace(
-        ",", "."
-    )
+    ).replace(",", ".")
 
 
 def number(value):
 
     return "{:,.0f}".format(
         value
-    ).replace(
-        ",", "."
-    )
+    ).replace(",", ".")
 
+
+# =========================================================
+# HEADER / FOOTER
+# =========================================================
 
 def draw_logo(canvas, doc):
 
     width, height = A4
 
-    # Barra superiore
-
     canvas.saveState()
 
-    canvas.setFillColor(
-        GREEN
-    )
+    # Barra superiore
+    canvas.setFillColor(GREEN)
 
     canvas.rect(
         0,
@@ -468,12 +342,8 @@ def draw_logo(canvas, doc):
         stroke=0
     )
 
-
-    # Logo testuale elegante
-
-    canvas.setFillColor(
-        WHITE
-    )
+    # Nome azienda
+    canvas.setFillColor(WHITE)
 
     canvas.setFont(
         "Helvetica-Bold",
@@ -486,7 +356,6 @@ def draw_logo(canvas, doc):
         "ENERGIA GIUSTA"
     )
 
-
     canvas.setFont(
         "Helvetica",
         7.5
@@ -498,12 +367,8 @@ def draw_logo(canvas, doc):
         "Partner ENI Plenitude"
     )
 
-
     # Footer
-
-    canvas.setStrokeColor(
-        MID_GREY
-    )
+    canvas.setStrokeColor(MID_GREY)
 
     canvas.line(
         18 * mm,
@@ -512,10 +377,7 @@ def draw_logo(canvas, doc):
         14 * mm
     )
 
-
-    canvas.setFillColor(
-        GREY
-    )
+    canvas.setFillColor(GREY)
 
     canvas.setFont(
         "Helvetica",
@@ -534,159 +396,125 @@ def draw_logo(canvas, doc):
         f"Pagina {doc.page}"
     )
 
-
     canvas.restoreState()
 
+
+# =========================================================
+# STILI
+# =========================================================
 
 def title_style():
 
     return ParagraphStyle(
-
         "TitleCustom",
-
         fontName="Helvetica-Bold",
-
         fontSize=25,
-
         leading=29,
-
         textColor=DARK,
-
         spaceAfter=8 * mm
-
     )
 
 
 def subtitle_style():
 
     return ParagraphStyle(
-
         "SubtitleCustom",
-
         fontName="Helvetica",
-
         fontSize=11,
-
         leading=15,
-
         textColor=GREY,
-
         spaceAfter=8 * mm
-
     )
 
 
 def section_style():
 
     return ParagraphStyle(
-
         "SectionCustom",
-
         fontName="Helvetica-Bold",
-
         fontSize=17,
-
         leading=21,
-
         textColor=DARK_GREEN,
-
         spaceBefore=2 * mm,
-
         spaceAfter=6 * mm
-
     )
 
 
 def normal_style():
 
     return ParagraphStyle(
-
         "NormalCustom",
-
         fontName="Helvetica",
-
         fontSize=9.5,
-
         leading=14,
-
         textColor=DARK
-
     )
 
 
 def small_style():
 
     return ParagraphStyle(
-
         "SmallCustom",
-
         fontName="Helvetica",
-
         fontSize=8,
-
         leading=11,
-
         textColor=GREY
-
     )
 
 
 def centered_style():
 
     return ParagraphStyle(
-
         "CenteredCustom",
-
         fontName="Helvetica",
-
         fontSize=9,
-
         leading=13,
-
         alignment=TA_CENTER,
-
         textColor=DARK
-
     )
 
 
+# =========================================================
+# KPI
+# =========================================================
+
 def kpi_box(label, value):
 
-    data = [[
+    data = [
 
-        Paragraph(
-            label,
-            ParagraphStyle(
-                "KPILabel",
-                fontName="Helvetica",
-                fontSize=8,
-                textColor=GREY,
-                alignment=TA_CENTER
+        [
+            Paragraph(
+                label,
+                ParagraphStyle(
+                    "KPILabel",
+                    fontName="Helvetica",
+                    fontSize=8,
+                    textColor=GREY,
+                    alignment=TA_CENTER
+                )
             )
-        )
+        ],
 
-    ], [
-
-        Paragraph(
-            value,
-            ParagraphStyle(
-                "KPIValue",
-                fontName="Helvetica-Bold",
-                fontSize=15,
-                textColor=DARK_GREEN,
-                alignment=TA_CENTER
+        [
+            Paragraph(
+                value,
+                ParagraphStyle(
+                    "KPIValue",
+                    fontName="Helvetica-Bold",
+                    fontSize=15,
+                    textColor=DARK_GREEN,
+                    alignment=TA_CENTER
+                )
             )
-        )
+        ]
 
-    ]]
-
+    ]
 
     table = Table(
         data,
         colWidths=[43 * mm],
         rowHeights=[10 * mm, 15 * mm]
     )
-
 
     table.setStyle(
         TableStyle([
@@ -733,13 +561,16 @@ def kpi_box(label, value):
     return table
 
 
+# =========================================================
+# GRAFICO PRODUZIONE MENSILE
+# =========================================================
+
 def make_monthly_chart(monthly):
 
     drawing = Drawing(
         175 * mm,
         82 * mm
     )
-
 
     chart = VerticalBarChart()
 
@@ -770,7 +601,6 @@ def make_monthly_chart(monthly):
 
     ]
 
-
     chart.valueAxis.valueMin = 0
 
     maximum = max(
@@ -783,35 +613,30 @@ def make_monthly_chart(monthly):
         ) * 500
     )
 
-
     chart.valueAxis.valueStep = (
         chart.valueAxis.valueMax / 5
     )
 
-
     chart.bars[0].fillColor = GREEN
-
     chart.bars[0].strokeColor = GREEN
 
-
     chart.categoryAxis.labels.fontName = "Helvetica"
-
     chart.categoryAxis.labels.fontSize = 7
 
     chart.valueAxis.labels.fontName = "Helvetica"
-
     chart.valueAxis.labels.fontSize = 7
 
-
     chart.categoryAxis.strokeColor = MID_GREY
-
     chart.valueAxis.strokeColor = MID_GREY
-
 
     drawing.add(chart)
 
     return drawing
 
+
+# =========================================================
+# GRAFICO ECONOMICO
+# =========================================================
 
 def make_economic_chart(years):
 
@@ -820,8 +645,7 @@ def make_economic_chart(years):
         80 * mm
     )
 
-
-    chart = HorizontalLineChart()
+    chart = VerticalBarChart()
 
     chart.x = 10 * mm
     chart.y = 13 * mm
@@ -829,69 +653,44 @@ def make_economic_chart(years):
     chart.height = 52 * mm
     chart.width = 150 * mm
 
-
     chart.data = [[
-
         item["cumulative"]
         for item in years
-
     ]]
 
-
     chart.categoryAxis.categoryNames = [
-
         str(item["year"])
         for item in years
-
     ]
 
-
     maximum = max(
-
         item["cumulative"]
         for item in years
-
     ) if years else 1000
-
 
     chart.valueAxis.valueMin = 0
 
     chart.valueAxis.valueMax = (
-
-        math.ceil(
-            maximum / 5000
-        ) * 5000
-
+        math.ceil(maximum / 5000) * 5000
+        if maximum > 0
+        else 5000
     )
-
 
     chart.valueAxis.valueStep = (
-
         chart.valueAxis.valueMax / 5
-
     )
 
-
-    chart.lines[0].strokeColor = GREEN
-
-    chart.lines[0].strokeWidth = 2.5
-
-    chart.lines[0].symbol = None
-
+    chart.bars[0].fillColor = GREEN
+    chart.bars[0].strokeColor = GREEN
 
     chart.categoryAxis.labels.fontName = "Helvetica"
-
     chart.categoryAxis.labels.fontSize = 6
 
     chart.valueAxis.labels.fontName = "Helvetica"
-
     chart.valueAxis.labels.fontSize = 7
 
-
     chart.categoryAxis.strokeColor = MID_GREY
-
     chart.valueAxis.strokeColor = MID_GREY
-
 
     drawing.add(chart)
 
@@ -909,27 +708,22 @@ def generate_pdf():
         force=True
     )
 
-
     result = calculate_values(d)
-
 
     address = d.get(
         "address",
         ""
     )
 
-
     lat = d.get(
         "lat",
         ""
     )
 
-
     lon = d.get(
         "lon",
         ""
     )
-
 
     kwp = float(
         d.get(
@@ -938,14 +732,12 @@ def generate_pdf():
         )
     )
 
-
     battery = float(
         d.get(
             "battery",
             0
         )
     )
-
 
     angle = float(
         d.get(
@@ -954,12 +746,10 @@ def generate_pdf():
         )
     )
 
-
     aspect = d.get(
         "aspect",
         "0"
     )
-
 
     loss = float(
         d.get(
@@ -968,7 +758,6 @@ def generate_pdf():
         )
     )
 
-
     consumption = float(
         d.get(
             "consumption",
@@ -976,12 +765,10 @@ def generate_pdf():
         )
     )
 
-
     profile = d.get(
         "profile",
         "equilibrato"
     )
-
 
     cost = float(
         d.get(
@@ -990,14 +777,12 @@ def generate_pdf():
         )
     )
 
-
     deduction = float(
         d.get(
             "deduction",
             0
         )
     )
-
 
     energy_price = float(
         d.get(
@@ -1006,14 +791,12 @@ def generate_pdf():
         )
     )
 
-
     export_price = float(
         d.get(
             "export_price",
             0.10
         )
     )
-
 
     production = float(
         d.get(
@@ -1022,19 +805,13 @@ def generate_pdf():
         )
     )
 
-
     monthly = d.get(
         "monthly_production",
         []
     )
 
-
     if not monthly:
-
-        monthly = [
-            0
-        ] * 12
-
+        monthly = [0] * 12
 
     profile_labels = {
 
@@ -1049,15 +826,10 @@ def generate_pdf():
 
     }
 
-
     profile_label = profile_labels.get(
-
         profile,
-
         "Equilibrato"
-
     )
-
 
     aspect_labels = {
 
@@ -1072,49 +844,34 @@ def generate_pdf():
 
     }
 
-
     aspect_label = aspect_labels.get(
-
         str(aspect),
-
         "Personalizzato"
-
     )
-
 
     today = datetime.now().strftime(
         "%d/%m/%Y"
     )
 
-
     gross_25 = result[
         "gross_25"
     ]
-
 
     net_25 = result[
         "net_25"
     ]
 
-
     payback = result[
         "payback"
     ]
 
-
     payback_text = (
-
         f"{payback},0 anni"
-
         if payback
-
         else "Non raggiunto"
-
     )
 
-
     buffer = io.BytesIO()
-
 
     doc = SimpleDocTemplate(
 
@@ -1136,10 +893,6 @@ def generate_pdf():
 
     )
 
-
-    styles = getSampleStyleSheet()
-
-
     story = []
 
 
@@ -1154,7 +907,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "ANALISI<br/>FOTOVOLTAICA",
@@ -1162,14 +914,12 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Analisi energetica ed economica dell'impianto",
             subtitle_style()
         )
     )
-
 
     cover_data = [
 
@@ -1191,6 +941,7 @@ def generate_pdf():
                 address
                 if address
                 else "Indirizzo non specificato",
+
                 ParagraphStyle(
                     "CoverAddress",
                     fontName="Helvetica-Bold",
@@ -1202,6 +953,7 @@ def generate_pdf():
 
             Paragraph(
                 today,
+
                 ParagraphStyle(
                     "CoverDate",
                     fontName="Helvetica-Bold",
@@ -1214,7 +966,6 @@ def generate_pdf():
 
     ]
 
-
     cover_table = Table(
 
         cover_data,
@@ -1225,7 +976,6 @@ def generate_pdf():
         ]
 
     )
-
 
     cover_table.setStyle(
 
@@ -1285,11 +1035,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         cover_table
     )
-
 
     story.append(
         Spacer(
@@ -1297,7 +1045,6 @@ def generate_pdf():
             18 * mm
         )
     )
-
 
     intro_box = Table(
 
@@ -1319,7 +1066,6 @@ def generate_pdf():
         ]
 
     )
-
 
     intro_box.setStyle(
 
@@ -1372,11 +1118,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         intro_box
     )
-
 
     story.append(
         Spacer(
@@ -1385,10 +1129,10 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Energia Giusta",
+
             ParagraphStyle(
                 "BrandBig",
                 fontName="Helvetica-Bold",
@@ -1399,10 +1143,10 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Consulenza energetica e soluzioni per l'efficienza",
+
             ParagraphStyle(
                 "BrandSub",
                 fontName="Helvetica",
@@ -1412,7 +1156,6 @@ def generate_pdf():
             )
         )
     )
-
 
     story.append(
         PageBreak()
@@ -1430,7 +1173,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "La produzione è stimata tramite PVGIS 5.3 "
@@ -1440,14 +1182,12 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
             5 * mm
         )
     )
-
 
     kpi_table = Table(
 
@@ -1484,7 +1224,6 @@ def generate_pdf():
 
     )
 
-
     kpi_table.setStyle(
 
         TableStyle([
@@ -1514,11 +1253,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         kpi_table
     )
-
 
     story.append(
         Spacer(
@@ -1527,10 +1264,10 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Produzione energetica stimata",
+
             ParagraphStyle(
                 "ChartTitle",
                 fontName="Helvetica-Bold",
@@ -1540,7 +1277,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
@@ -1548,13 +1284,11 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         make_monthly_chart(
             monthly
         )
     )
-
 
     story.append(
         Spacer(
@@ -1562,7 +1296,6 @@ def generate_pdf():
             5 * mm
         )
     )
-
 
     technical_data = [
 
@@ -1592,7 +1325,6 @@ def generate_pdf():
 
     ]
 
-
     technical_table = Table(
 
         technical_data,
@@ -1605,7 +1337,6 @@ def generate_pdf():
         ]
 
     )
-
 
     technical_table.setStyle(
 
@@ -1686,11 +1417,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         technical_table
     )
-
 
     story.append(
         PageBreak()
@@ -1708,7 +1437,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Sintesi economica dell'investimento sulla base "
@@ -1717,14 +1445,12 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
             8 * mm
         )
     )
-
 
     economic_kpis = Table(
 
@@ -1755,7 +1481,6 @@ def generate_pdf():
 
     )
 
-
     economic_kpis.setStyle(
 
         TableStyle([
@@ -1778,11 +1503,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         economic_kpis
     )
-
 
     story.append(
         Spacer(
@@ -1791,13 +1514,13 @@ def generate_pdf():
         )
     )
 
-
     payback_box = Table(
 
         [[
 
             Paragraph(
                 "TEMPO DI RIENTRO STIMATO",
+
                 ParagraphStyle(
                     "PaybackLabel",
                     fontName="Helvetica-Bold",
@@ -1811,6 +1534,7 @@ def generate_pdf():
 
             Paragraph(
                 payback_text,
+
                 ParagraphStyle(
                     "PaybackValue",
                     fontName="Helvetica-Bold",
@@ -1818,16 +1542,15 @@ def generate_pdf():
                     textColor=DARK,
                     alignment=TA_CENTER
                 )
-            ]],
+            )
 
-        ],
+        ]],
 
         colWidths=[
             160 * mm
         ]
 
     )
-
 
     payback_box.setStyle(
 
@@ -1866,11 +1589,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         payback_box
     )
-
 
     story.append(
         Spacer(
@@ -1878,7 +1599,6 @@ def generate_pdf():
             10 * mm
         )
     )
-
 
     long_term = Table(
 
@@ -1898,6 +1618,7 @@ def generate_pdf():
 
             Paragraph(
                 euro(gross_25),
+
                 ParagraphStyle(
                     "LongValue1",
                     fontName="Helvetica-Bold",
@@ -1909,6 +1630,7 @@ def generate_pdf():
 
             Paragraph(
                 euro(net_25),
+
                 ParagraphStyle(
                     "LongValue2",
                     fontName="Helvetica-Bold",
@@ -1926,7 +1648,6 @@ def generate_pdf():
         ]
 
     )
-
 
     long_term.setStyle(
 
@@ -1965,11 +1686,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         long_term
     )
-
 
     story.append(
         Spacer(
@@ -1977,7 +1696,6 @@ def generate_pdf():
             12 * mm
         )
     )
-
 
     explanation = Table(
 
@@ -1999,7 +1717,6 @@ def generate_pdf():
         ]
 
     )
-
 
     explanation.setStyle(
 
@@ -2052,11 +1769,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         explanation
     )
-
 
     story.append(
         PageBreak()
@@ -2074,7 +1789,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Stima dell'evoluzione del beneficio economico "
@@ -2085,7 +1799,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
@@ -2093,13 +1806,11 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         make_economic_chart(
             result["years"]
         )
     )
-
 
     story.append(
         Spacer(
@@ -2107,7 +1818,6 @@ def generate_pdf():
             3 * mm
         )
     )
-
 
     milestones = [
         1,
@@ -2118,7 +1828,6 @@ def generate_pdf():
         25
     ]
 
-
     projection_rows = [
 
         [
@@ -2128,7 +1837,6 @@ def generate_pdf():
         ]
 
     ]
-
 
     for year in milestones:
 
@@ -2143,7 +1851,6 @@ def generate_pdf():
             None
 
         )
-
 
         if item:
 
@@ -2161,7 +1868,6 @@ def generate_pdf():
 
             ])
 
-
     projection_table = Table(
 
         projection_rows,
@@ -2173,7 +1879,6 @@ def generate_pdf():
         ]
 
     )
-
 
     projection_table.setStyle(
 
@@ -2254,11 +1959,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         projection_table
     )
-
 
     story.append(
         Spacer(
@@ -2266,7 +1969,6 @@ def generate_pdf():
             7 * mm
         )
     )
-
 
     assumptions = Table(
 
@@ -2276,11 +1978,9 @@ def generate_pdf():
                 "<b>PARAMETRI DELLA SIMULAZIONE</b><br/><br/>"
                 "Degrado produzione: 0,5% annuo<br/>"
                 "Crescita prezzo energia acquistata: 2% annuo<br/>"
-                "Valore energia immessa: "
-                f"{energy_price:.2f} €/kWh acquistata / "
-                f"{export_price:.2f} €/kWh immessa<br/>"
-                "Profilo consumi: "
-                f"{profile_label}",
+                f"Prezzo energia acquistata: {energy_price:.2f} €/kWh<br/>"
+                f"Valore energia immessa: {export_price:.2f} €/kWh<br/>"
+                f"Profilo consumi: {profile_label}",
                 normal_style()
             )
 
@@ -2291,7 +1991,6 @@ def generate_pdf():
         ]
 
     )
-
 
     assumptions.setStyle(
 
@@ -2344,11 +2043,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         assumptions
     )
-
 
     story.append(
         Spacer(
@@ -2356,7 +2053,6 @@ def generate_pdf():
             7 * mm
         )
     )
-
 
     story.append(
         Paragraph(
@@ -2366,7 +2062,6 @@ def generate_pdf():
             small_style()
         )
     )
-
 
     story.append(
         PageBreak()
@@ -2384,7 +2079,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Un servizio completo dalla progettazione alla gestione "
@@ -2393,14 +2087,12 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
             8 * mm
         )
     )
-
 
     services = [
 
@@ -2441,9 +2133,7 @@ def generate_pdf():
 
     ]
 
-
     service_data = []
-
 
     for title, text in services:
 
@@ -2451,6 +2141,7 @@ def generate_pdf():
 
             Paragraph(
                 title,
+
                 ParagraphStyle(
                     "ServiceTitle",
                     fontName="Helvetica-Bold",
@@ -2466,7 +2157,6 @@ def generate_pdf():
 
         ])
 
-
     service_table = Table(
 
         service_data,
@@ -2477,7 +2167,6 @@ def generate_pdf():
         ]
 
     )
-
 
     service_table.setStyle(
 
@@ -2537,11 +2226,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         service_table
     )
-
 
     story.append(
         Spacer(
@@ -2550,10 +2237,10 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Garanzie",
+
             ParagraphStyle(
                 "GuaranteeTitle",
                 fontName="Helvetica-Bold",
@@ -2563,7 +2250,6 @@ def generate_pdf():
             )
         )
     )
-
 
     guarantees = [
 
@@ -2589,7 +2275,6 @@ def generate_pdf():
 
     ]
 
-
     guarantee_table = Table(
 
         guarantees,
@@ -2600,7 +2285,6 @@ def generate_pdf():
         ]
 
     )
-
 
     guarantee_table.setStyle(
 
@@ -2667,11 +2351,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         guarantee_table
     )
-
 
     story.append(
         PageBreak()
@@ -2689,10 +2371,10 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Grazie per la fiducia",
+
             ParagraphStyle(
                 "Thanks",
                 fontName="Helvetica-Bold",
@@ -2705,11 +2387,11 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Per qualsiasi approfondimento o per definire "
             "la configurazione dell'impianto, resto a disposizione.",
+
             ParagraphStyle(
                 "ThanksSub",
                 fontName="Helvetica",
@@ -2721,14 +2403,12 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
             18 * mm
         )
     )
-
 
     contact_table = Table(
 
@@ -2739,6 +2419,7 @@ def generate_pdf():
                 "Responsabile Commerciale<br/>"
                 "Energia Giusta<br/>"
                 "Partner ENI Plenitude",
+
                 ParagraphStyle(
                     "ContactName",
                     fontName="Helvetica",
@@ -2750,10 +2431,11 @@ def generate_pdf():
 
             Paragraph(
                 "<b>CONTATTI</b><br/><br/>"
-                "📱 351.7478652<br/>"
+                "Tel. / WhatsApp: 351.7478652<br/>"
                 "WhatsApp disponibile<br/><br/>"
-                "✉ simone.alfarano@energiagiusta.it<br/><br/>"
-                "🌐 www.energiagiusta.it",
+                "Email: simone.alfarano@energiagiusta.it<br/><br/>"
+                "Sito: www.energiagiusta.it",
+
                 ParagraphStyle(
                     "ContactInfo",
                     fontName="Helvetica",
@@ -2771,7 +2453,6 @@ def generate_pdf():
         ]
 
     )
-
 
     contact_table.setStyle(
 
@@ -2831,11 +2512,9 @@ def generate_pdf():
 
     )
 
-
     story.append(
         contact_table
     )
-
 
     story.append(
         Spacer(
@@ -2844,10 +2523,10 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "ENERGIA GIUSTA",
+
             ParagraphStyle(
                 "FinalBrand",
                 fontName="Helvetica-Bold",
@@ -2858,7 +2537,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
@@ -2866,10 +2544,10 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Felicità sostenibile. Semplicemente quella Giusta.",
+
             ParagraphStyle(
                 "FinalClaim",
                 fontName="Helvetica",
@@ -2880,7 +2558,6 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Spacer(
             1,
@@ -2888,13 +2565,13 @@ def generate_pdf():
         )
     )
 
-
     story.append(
         Paragraph(
             "Stima commerciale: il risultato dipende da tariffe, "
             "profilo reale dei consumi, condizioni di scambio/ritiro, "
             "ombreggiamento e altri fattori.<br/><br/>"
             "<b>Il presente documento non costituisce un preventivo finanziario.</b>",
+
             ParagraphStyle(
                 "DisclaimerFinal",
                 fontName="Helvetica",
@@ -2912,18 +2589,12 @@ def generate_pdf():
     # =====================================================
 
     doc.build(
-
         story,
-
         onFirstPage=draw_logo,
-
         onLaterPages=draw_logo
-
     )
 
-
     buffer.seek(0)
-
 
     return send_file(
 
@@ -2945,11 +2616,7 @@ def generate_pdf():
 if __name__ == "__main__":
 
     app.run(
-
         host="127.0.0.1",
-
         port=5000,
-
         debug=False
-
     )
