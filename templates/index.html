@@ -96,6 +96,7 @@
 
 <script>
 let annualProduction = 0;
+let monthlyProduction = [];
 
 const v = id => document.getElementById(id).value;
 
@@ -126,6 +127,7 @@ async function getPVGIS(){
     const d = await r.json();
 
     annualProduction = d.annual_kwh;
+    monthlyProduction = d.monthly_kwh;
 
     result.innerHTML = `
       <div class="big">
@@ -306,7 +308,7 @@ async function calculate(){
   </div>
 
 
-  <p class="note">
+    <p class="note">
 
     Stima commerciale: il risultato dipende da tariffe,
     profilo reale dei consumi, condizioni di scambio/ritiro,
@@ -318,16 +320,20 @@ async function calculate(){
 
   </p>
 
+  <div style="margin-top:25px; text-align:center;">
+
+    <button
+      onclick="generatePDF()"
+      style="
+        font-size:16px;
+        padding:14px 24px;
+        font-weight:bold;
+        cursor:pointer;
+      "
+    >
+      📄 GENERA REPORT PDF
+    </button>
+
+  </div>
+
 `;
-      } catch(e) {
-
-    result.innerHTML =
-      "<b>Errore nel calcolo.</b><br>" +
-      "Controlla i dati inseriti e riprova.";
-
-  }
-}
-
-</script>
-</body>
-</html>
