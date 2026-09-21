@@ -109,15 +109,13 @@ def calculate():
     # ---------------------------------------------------------
     # PROIEZIONE ECONOMICA 25 ANNI
     # ---------------------------------------------------------
-    #
-    # Il prezzo dell'energia immessa resta invariato.
-    #
 
     degradation = 0.005
     energy_price_growth = 0.02
     years = []
 
-    cumulative = -net_cost
+    # Cumulato dei soli benefici economici annuali
+    cumulative_benefit = 0
 
     for y in range(1, 26):
 
@@ -148,23 +146,23 @@ def calculate():
             + export_y * export_price
         )
 
-        cumulative += benefit
+        # Cumulato dei benefici annuali
+        cumulative_benefit += benefit
 
-        # Primo anno in cui l'investimento viene recuperato
-        if payback is None and cumulative >= 0:
+        # Primo anno in cui i benefici cumulati
+        # recuperano l'investimento netto
+        if payback is None and cumulative_benefit >= net_cost:
             payback = y
 
-        years.append({            "year": y,
+        years.append({
+            "year": y,
             "benefit": benefit,
-            "cumulative": cumulative,
+            "cumulative": cumulative_benefit,
             "production": production_y,
             "self_used": self_used_y,
             "export": export_y,
             "energy_price": energy_price_y
-        })
-
-    return jsonify({"self_used": self_used,
-        "export": export,
+        })"export": export,
         "grid_purchase": grid,
         "annual_saving": annual_saving,
         "net_cost": net_cost,
