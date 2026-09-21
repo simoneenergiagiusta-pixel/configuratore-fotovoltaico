@@ -92,7 +92,11 @@ def calculate():
 
     # Risparmio del primo anno.
     annual_saving = (
-          net_cost = max(
+        self_used * price
+        + export * export_price
+    )
+
+    net_cost = max(
         0,
         cost - deduction
     )
@@ -105,9 +109,6 @@ def calculate():
     # ---------------------------------------------------------
     # PROIEZIONE ECONOMICA 25 ANNI
     # ---------------------------------------------------------
-    #
-    # Degrado FV: 0,5% annuo
-    # Aumento ipotizzato prezzo energia: 2% annuo
     #
     # Il prezzo dell'energia immessa resta invariato.
     #
