@@ -337,3 +337,112 @@ async function calculate(){
   </div>
 
 `;
+          } catch(e) {
+
+        result.innerHTML =
+          "<b>Errore nel calcolo.</b><br>" +
+          "Controlla i dati inseriti e riprova.";
+
+      }
+
+    }
+
+    async function generatePDF(){
+
+      try {
+
+        const button = event.target;
+
+        button.disabled = true;
+        button.innerText = "⏳ GENERAZIONE PDF...";
+
+        const r = await fetch("/api/pdf", {
+
+          method:"POST",
+
+          headers:{
+            "Content-Type":"application/json"
+          },
+
+          body:JSON.stringify({
+
+            address:v("address"),
+
+            lat:v("lat"),
+            lon:v("lon"),
+
+            kwp:v("kwp"),
+            battery:v("battery"),
+
+            angle:v("angle"),
+            aspect:v("aspect"),
+            loss:v("loss"),
+
+            consumption:v("consumption"),
+            profile:v("profile"),
+
+            cost:v("cost"),
+            deduction:v("deduction"),
+
+            energy_price:v("energy_price"),
+            export_price:v("export_price"),
+
+            production:annualProduction,
+
+            monthly_production:monthlyProduction
+
+          })
+
+        });
+
+        if(!r.ok){
+
+          throw new Error(
+            "Errore nella generazione del PDF"
+          );
+
+        }
+
+        const blob = await r.blob();
+
+        const url =
+          window.URL.createObjectURL(blob);
+
+        const a =
+          document.createElement("a");
+
+        a.href = url;
+
+        a.download =
+          "Analisi_Fotovoltaica.pdf";
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        a.remove();
+
+        window.URL.revokeObjectURL(url);
+
+        button.disabled = false;
+
+        button.innerText =
+          "📄 GENERA REPORT PDF";
+
+      }
+
+      catch(e){
+
+        alert(
+          "Si è verificato un errore durante la generazione del PDF."
+        );
+
+        console.error(e);
+
+      }
+
+    }
+
+</script>
+</body>
+</html>
