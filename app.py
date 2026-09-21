@@ -154,7 +154,7 @@ def calculate():
         if payback is None and cumulative_benefit >= net_cost:
             payback = y
 
-                years.append({
+        years.append({
             "year": y,
             "benefit": benefit,
             "cumulative": cumulative_benefit,
