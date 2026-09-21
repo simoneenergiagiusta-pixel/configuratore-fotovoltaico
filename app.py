@@ -148,7 +148,7 @@ def calculate():
             + export_y * export_price
         )
 
-                cumulative += benefit
+        cumulative += benefit
 
         # Primo anno in cui l'investimento viene recuperato
         if payback is None and cumulative >= 0:
