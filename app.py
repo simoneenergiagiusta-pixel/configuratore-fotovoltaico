@@ -154,7 +154,7 @@ def calculate():
         if payback is None and cumulative_benefit >= net_cost:
             payback = y
 
-        years.append({
+                years.append({
             "year": y,
             "benefit": benefit,
             "cumulative": cumulative_benefit,
@@ -162,7 +162,11 @@ def calculate():
             "self_used": self_used_y,
             "export": export_y,
             "energy_price": energy_price_y
-        })"export": export,
+        })
+
+    return jsonify({
+        "self_used": self_used,
+        "export": export,
         "grid_purchase": grid,
         "annual_saving": annual_saving,
         "net_cost": net_cost,
