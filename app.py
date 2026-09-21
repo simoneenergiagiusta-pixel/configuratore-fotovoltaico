@@ -92,20 +92,15 @@ def calculate():
 
     # Risparmio del primo anno.
     annual_saving = (
-        self_used * price
-        + export * export_price
-    )
-
-    net_cost = max(
+          net_cost = max(
         0,
         cost - deduction
     )
 
-        # Calcolo del rientro effettivo dell'investimento.
+    # Calcolo del rientro effettivo dell'investimento.
     # Verrà individuato l'anno in cui il beneficio cumulato
     # supera l'investimento netto.
-     payback = None
-    )
+    payback = None
 
     # ---------------------------------------------------------
     # PROIEZIONE ECONOMICA 25 ANNI
@@ -119,7 +114,6 @@ def calculate():
 
     degradation = 0.005
     energy_price_growth = 0.02
-
     years = []
 
     cumulative = -net_cost
