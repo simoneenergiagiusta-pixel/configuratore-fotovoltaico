@@ -1,311 +1,460 @@
-*{
-  box-sizing:border-box;
+* {
+    box-sizing: border-box;
 }
 
-body{
-  font-family:Arial,sans-serif;
-  background:#f3f6f4;
-  margin:0;
-  color:#17331f;
-  line-height:1.45;
+body {
+    font-family: Arial, sans-serif;
+    background: #f3f6f4;
+    margin: 0;
+    color: #17331f;
+    line-height: 1.5;
 }
 
-.wrap{
-  max-width:1100px;
-  margin:auto;
-  padding:24px;
+.wrap {
+    max-width: 1100px;
+    margin: auto;
+    padding: 28px 24px;
 }
 
-header{
-  margin-bottom:20px;
+/* =========================
+   HEADER
+========================= */
+
+header {
+    margin-bottom: 24px;
+    padding-bottom: 18px;
+    border-bottom: 3px solid #e5ed4a;
 }
 
-header h1{
-  margin:0;
-  font-size:32px;
-  font-weight:900;
+header h1 {
+    margin: 0;
+    font-size: 34px;
+    font-weight: 900;
+    letter-spacing: -0.5px;
 }
 
-header p{
-  margin:6px 0 0;
-  color:#607267;
-  font-size:15px;
+header p {
+    margin: 7px 0 0;
+    color: #607267;
+    font-size: 15px;
 }
 
-h2{
-  margin-top:0;
-  font-size:22px;
+/* =========================
+   TITOLI
+========================= */
+
+h2 {
+    margin-top: 0;
+    font-size: 23px;
+    font-weight: 800;
 }
 
-h3{
-  margin-top:0;
-  font-size:20px;
+h3 {
+    margin-top: 0;
+    font-size: 20px;
+    font-weight: 800;
 }
 
-.card{
-  background:#fff;
-  border-radius:14px;
-  padding:22px;
-  margin:16px 0;
-  box-shadow:0 3px 14px #0001;
+/* =========================
+   CARD
+========================= */
+
+.card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    margin: 18px 0;
+    box-shadow: 0 5px 18px rgba(0, 0, 0, 0.07);
+    border: 1px solid #e1e9e3;
 }
 
-.grid{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:14px;
+/* =========================
+   FORM
+========================= */
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
 }
 
-label{
-  font-weight:700;
-  font-size:14px;
+label {
+    display: block;
+    font-weight: 700;
+    font-size: 14px;
+    color: #24442d;
 }
 
 input,
-select{
-  display:block;
-  width:100%;
-  box-sizing:border-box;
-  margin-top:6px;
-  padding:12px;
-  border:1px solid #ccd7cf;
-  border-radius:8px;
-  font-size:15px;
-  background:#fff;
-  color:#17331f;
+select {
+    display: block;
+    width: 100%;
+    margin-top: 7px;
+    padding: 13px 12px;
+    border: 1px solid #ccd7cf;
+    border-radius: 9px;
+    font-size: 15px;
+    background: #ffffff;
+    color: #17331f;
+    min-height: 46px;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 input:focus,
-select:focus{
-  outline:none;
-  border-color:#198754;
-  box-shadow:0 0 0 2px #19875422;
+select:focus {
+    outline: none;
+    border-color: #198754;
+    box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.14);
 }
 
-button{
-  margin-top:18px;
-  padding:14px 20px;
-  border:0;
-  border-radius:9px;
-  background:#198754;
-  color:white;
-  font-weight:800;
-  font-size:15px;
-  cursor:pointer;
-  transition:transform .1s,opacity .1s;
+/* =========================
+   BUTTON
+========================= */
+
+button {
+    width: 100%;
+    margin-top: 20px;
+    padding: 15px 20px;
+    border: 0;
+    border-radius: 10px;
+    background: #198754;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 16px;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 10px rgba(25, 135, 84, 0.22);
 }
 
-button:hover{
-  opacity:.92;
+button:hover {
+    opacity: 0.93;
+    box-shadow: 0 5px 14px rgba(25, 135, 84, 0.28);
 }
 
-button:active{
-  transform:scale(.98);
+button:active {
+    transform: scale(0.98);
 }
 
-.result{
-  margin-top:18px;
+/* =========================
+   RISULTATI
+========================= */
+
+.result {
+    margin-top: 20px;
 }
 
-.big{
-  font-size:36px;
-  font-weight:900;
-  margin-bottom:8px;
+.big {
+    font-size: 38px;
+    font-weight: 900;
+    margin-bottom: 8px;
+    color: #198754;
+    letter-spacing: -0.5px;
 }
 
-.months{
-  display:grid;
-  grid-template-columns:repeat(12,1fr);
-  gap:5px;
-  margin-top:15px;
+/* =========================
+   MESI
+========================= */
+
+.months {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 6px;
+    margin-top: 16px;
 }
 
-.months span{
-  text-align:center;
-  background:#edf5ef;
-  padding:8px 2px;
-  border-radius:6px;
-  font-size:12px;
+.months span {
+    text-align: center;
+    background: #edf5ef;
+    padding: 9px 3px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 700;
 }
 
-.kpis{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:12px;
+/* =========================
+   KPI
+========================= */
+
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
 }
 
-.kpis div{
-  background:#edf5ef;
-  border-radius:10px;
-  padding:16px;
-  border:1px solid #dce9df;
+.kpis div {
+    background: #edf5ef;
+    border-radius: 12px;
+    padding: 17px;
+    border: 1px solid #dce9df;
 }
 
-.kpis small{
-  display:block;
-  color:#607267;
-  font-size:12px;
-  font-weight:700;
+.kpis small {
+    display: block;
+    color: #607267;
+    font-size: 12px;
+    font-weight: 700;
 }
 
-.kpis b{
-  display:block;
-  font-size:22px;
-  margin-top:6px;
+.kpis b {
+    display: block;
+    font-size: 23px;
+    margin-top: 7px;
+    color: #17331f;
 }
 
-.projection{
-  margin-top:24px;
-  padding:20px;
-  border-radius:12px;
-  background:#f7faf8;
-  border:1px solid #dce9df;
+/* =========================
+   PROIEZIONE ECONOMICA
+========================= */
+
+.projection {
+    margin-top: 26px;
+    padding: 22px;
+    border-radius: 14px;
+    background: #f7faf8;
+    border: 1px solid #dce9df;
 }
 
-.projection p{
-  color:#607267;
-  font-size:14px;
+.projection h2 {
+    margin-bottom: 6px;
 }
 
-.projection-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:16px;
-  background:#fff;
-  border-radius:8px;
-  overflow:hidden;
+.projection p {
+    color: #607267;
+    font-size: 14px;
 }
 
-.projection-table th{
-  background:#edf5ef;
-  padding:12px;
-  text-align:left;
-  font-size:13px;
+/* =========================
+   TABELLA
+========================= */
+
+.projection-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 17px;
+    background: #ffffff;
+    border-radius: 10px;
+    overflow: hidden;
 }
 
-.projection-table td{
-  padding:12px;
-  border-top:1px solid #e5ebe7;
-  font-size:14px;
+.projection-table th {
+    background: #edf5ef;
+    padding: 13px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 800;
+    color: #24442d;
 }
 
-.projection-table tr:hover{
-  background:#f7faf8;
+.projection-table td {
+    padding: 13px;
+    border-top: 1px solid #e5ebe7;
+    font-size: 14px;
 }
 
-.summary{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:12px;
-  margin-top:18px;
+.projection-table tr:hover {
+    background: #f7faf8;
 }
 
-.summary div{
-  background:#fff;
-  border:2px solid #dce9df;
-  border-radius:12px;
-  padding:17px;
+/* =========================
+   RIEPILOGO ECONOMICO
+========================= */
+
+.summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 20px;
 }
 
-.summary span{
-  display:block;
-  color:#607267;
-  font-size:13px;
-  font-weight:700;
+.summary div {
+    background: #ffffff;
+    border: 2px solid #dce9df;
+    border-radius: 13px;
+    padding: 18px;
 }
 
-.summary strong{
-  display:block;
-  margin-top:6px;
-  font-size:23px;
+.summary span {
+    display: block;
+    color: #607267;
+    font-size: 13px;
+    font-weight: 700;
 }
 
-.note{
-  font-size:13px;
-  color:#607267;
-  margin-top:16px;
+.summary strong {
+    display: block;
+    margin-top: 7px;
+    font-size: 24px;
+    color: #198754;
 }
 
-@media(max-width:800px){
-
-  .wrap{
-    padding:14px;
-  }
-
-  header h1{
-    font-size:26px;
-  }
-
-  header p{
-    font-size:14px;
-  }
-
-  .card{
-    padding:17px;
-    margin:12px 0;
-    border-radius:12px;
-  }
-
-  h2{
-    font-size:20px;
-  }
-
-  .grid,
-  .kpis,
-  .summary{
-    grid-template-columns:1fr;
-  }
-
-  .months{
-    grid-template-columns:repeat(4,1fr);
-    gap:6px;
-  }
-
-  .months span{
-    padding:9px 3px;
-  }
-
-  .big{
-    font-size:30px;
-  }
-
-  button{
-    width:100%;
-    padding:15px;
-    font-size:15px;
-  }
-
-  .projection{
-    padding:15px;
-    overflow-x:auto;
-  }
-
-  .projection-table{
-    min-width:500px;
-  }
-
-  .projection-table th,
-  .projection-table td{
-    padding:10px;
-    font-size:13px;
-  }
-
-  .summary strong{
-    font-size:21px;
-  }
+/* Evidenzia il rientro */
+.summary div:nth-child(2) {
+    border-color: #e5ed4a;
+    background: #fbfdea;
 }
 
-@media(max-width:420px){
+/* =========================
+   NOTE
+========================= */
 
-  .months{
-    grid-template-columns:repeat(3,1fr);
-  }
+.note {
+    font-size: 13px;
+    color: #607267;
+    margin-top: 17px;
+    line-height: 1.55;
+}
 
-  .kpis b{
-    font-size:20px;
-  }
+/* =========================
+   TABLET
+========================= */
 
-  .big{
-    font-size:27px;
-  }
+@media (max-width: 800px) {
+
+    .wrap {
+        padding: 18px 14px;
+    }
+
+    header {
+        margin-bottom: 18px;
+        padding-bottom: 15px;
+    }
+
+    header h1 {
+        font-size: 27px;
+        line-height: 1.2;
+    }
+
+    header p {
+        font-size: 14px;
+    }
+
+    .card {
+        padding: 18px;
+        margin: 13px 0;
+        border-radius: 13px;
+    }
+
+    h2 {
+        font-size: 21px;
+    }
+
+    h3 {
+        font-size: 18px;
+    }
+
+    .grid,
+    .kpis,
+    .summary {
+        grid-template-columns: 1fr;
+    }
+
+    input,
+    select {
+        min-height: 48px;
+        font-size: 16px;
+    }
+
+    button {
+        min-height: 50px;
+        font-size: 16px;
+    }
+
+    .months {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 7px;
+    }
+
+    .months span {
+        padding: 10px 3px;
+    }
+
+    .big {
+        font-size: 31px;
+    }
+
+    .projection {
+        padding: 16px;
+        overflow-x: auto;
+    }
+
+    .projection-table {
+        min-width: 500px;
+    }
+
+    .projection-table th,
+    .projection-table td {
+        padding: 11px;
+        font-size: 13px;
+    }
+
+    .summary strong {
+        font-size: 22px;
+    }
+}
+
+/* =========================
+   SMARTPHONE
+========================= */
+
+@media (max-width: 420px) {
+
+    .wrap {
+        padding: 14px 10px;
+    }
+
+    header h1 {
+        font-size: 24px;
+    }
+
+    header p {
+        font-size: 13px;
+    }
+
+    .card {
+        padding: 15px;
+        border-radius: 12px;
+    }
+
+    h2 {
+        font-size: 19px;
+    }
+
+    .months {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .months span {
+        font-size: 11px;
+        padding: 9px 2px;
+    }
+
+    .kpis b {
+        font-size: 21px;
+    }
+
+    .big {
+        font-size: 28px;
+    }
+
+    .projection {
+        padding: 13px;
+    }
+
+    .projection-table {
+        min-width: 480px;
+    }
+
+    .projection-table th,
+    .projection-table td {
+        padding: 9px;
+        font-size: 12px;
+    }
+
+    .summary div {
+        padding: 15px;
+    }
+
+    .summary strong {
+        font-size: 21px;
+    }
 }
