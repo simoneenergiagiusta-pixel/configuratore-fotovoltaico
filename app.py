@@ -247,92 +247,77 @@ def draw_sun(c, x, y, size=24):
                x+math.cos(a)*size*.72, y+math.sin(a)*size*.72)
 
 def draw_pv_scene(c, x, y, w, h):
-    """Modern vector hero illustration inspired by a real residential PV installation."""
-    c.setFillColor(colors.white)
-    c.roundRect(x, y, w, h, 7*mm, fill=1, stroke=0)
-
-    # Sky / soft background
+    """Clean commercial PV illustration, fully contained inside its frame."""
+    # Frame
+    round_box(c, x, y, w, h, WHITE, None, 8)
     c.setFillColor(PALE_GREEN)
-    c.roundRect(x + 2*mm, y + 2*mm, w - 4*mm, h - 4*mm, 6*mm, fill=1, stroke=0)
+    c.roundRect(x+2*mm, y+2*mm, w-4*mm, h-4*mm, 6*mm, fill=1, stroke=0)
 
     # Sun
-    sx, sy = x + w - 24*mm, y + h - 18*mm
-    c.setFillColor(YELLOW)
-    c.circle(sx, sy, 8*mm, fill=1, stroke=0)
-    c.setStrokeColor(YELLOW)
-    c.setLineWidth(1.1)
-    for a in range(0, 360, 45):
-        import math
-        r1, r2 = 10*mm, 14*mm
-        x1 = sx + math.cos(math.radians(a))*r1
-        y1 = sy + math.sin(math.radians(a))*r1
-        x2 = sx + math.cos(math.radians(a))*r2
-        y2 = sy + math.sin(math.radians(a))*r2
-        c.line(x1, y1, x2, y2)
+    sx, sy = x+w-14*mm, y+h-12*mm
+    draw_sun(c, sx, sy, 15)
 
     # Ground
     c.setFillColor(colors.white)
-    c.roundRect(x + 5*mm, y + 5*mm, w - 10*mm, 20*mm, 4*mm, fill=1, stroke=0)
+    c.roundRect(x+6*mm, y+5*mm, w-12*mm, 13*mm, 4*mm, fill=1, stroke=0)
 
-    # House body
-    hx, hy = x + 28*mm, y + 13*mm
-    hw, hh = 72*mm, 34*mm
-    c.setFillColor(colors.white)
-    c.rect(hx, hy, hw, hh, fill=1, stroke=0)
+    # House
+    hx, hy = x+12*mm, y+10*mm
+    hw, hh = 48*mm, 25*mm
+    c.setFillColor(WHITE)
+    c.roundRect(hx, hy, hw, hh, 1.5*mm, fill=1, stroke=0)
 
     # Roof
-    c.setFillColor(DARK_GREEN)
-    p = c.beginPath()
-    p.moveTo(hx - 6*mm, hy + hh)
-    p.lineTo(hx + hw/2, hy + hh + 24*mm)
-    p.lineTo(hx + hw + 6*mm, hy + hh)
+    p=c.beginPath()
+    p.moveTo(hx-4*mm, hy+hh)
+    p.lineTo(hx+hw/2, hy+hh+18*mm)
+    p.lineTo(hx+hw+4*mm, hy+hh)
     p.close()
+    c.setFillColor(DARK_GREEN)
     c.drawPath(p, fill=1, stroke=0)
 
-    # PV panels on roof
-    panel_x = hx + 18*mm
-    panel_y = hy + hh + 5*mm
-    panel_w = 48*mm
-    panel_h = 15*mm
+    # PV array
+    px, py = hx+12*mm, hy+hh+4*mm
+    pw, ph = 30*mm, 10*mm
     c.saveState()
-    c.translate(panel_x, panel_y)
+    c.translate(px, py)
     c.rotate(20)
     c.setFillColor(colors.HexColor("#17324D"))
-    c.roundRect(0, 0, panel_w, panel_h, 1.5*mm, fill=1, stroke=0)
-    c.setStrokeColor(colors.HexColor("#86A6BC"))
-    c.setLineWidth(0.45)
-    for xx in [panel_w/4, panel_w/2, 3*panel_w/4]:
-        c.line(xx, 0, xx, panel_h)
-    for yy in [panel_h/3, 2*panel_h/3]:
-        c.line(0, yy, panel_w, yy)
+    c.roundRect(0,0,pw,ph,1*mm,fill=1,stroke=0)
+    c.setStrokeColor(colors.HexColor("#8AA5B8"))
+    c.setLineWidth(.35)
+    for xx in [pw/4,pw/2,3*pw/4]:
+        c.line(xx,0,xx,ph)
+    for yy in [ph/3,2*ph/3]:
+        c.line(0,yy,pw,yy)
     c.restoreState()
 
-    # Windows / door
+    # Windows and door
     c.setFillColor(LIGHT_GREEN)
-    c.rect(hx + 10*mm, hy + 18*mm, 13*mm, 12*mm, fill=1, stroke=0)
-    c.rect(hx + 28*mm, hy + 18*mm, 13*mm, 12*mm, fill=1, stroke=0)
+    c.rect(hx+7*mm,hy+13*mm,9*mm,7*mm,fill=1,stroke=0)
+    c.rect(hx+21*mm,hy+13*mm,9*mm,7*mm,fill=1,stroke=0)
     c.setFillColor(DARK_GREEN)
-    c.roundRect(hx + 52*mm, hy, 13*mm, 25*mm, 1.5*mm, fill=1, stroke=0)
+    c.roundRect(hx+36*mm,hy,7*mm,16*mm,1*mm,fill=1,stroke=0)
 
-    # Battery cabinet, cleaner than the old school icon
-    bx, by = x + 116*mm, y + 13*mm
-    c.setFillColor(colors.white)
-    c.roundRect(bx, by, 26*mm, 43*mm, 3.5*mm, fill=1, stroke=0)
-    c.setStrokeColor(MID_GREY)
-    c.setLineWidth(0.6)
-    c.roundRect(bx, by, 26*mm, 43*mm, 3.5*mm, fill=0, stroke=1)
+    # Battery cabinet, safely inside the illustration
+    bx, by = x+w-28*mm, y+9*mm
+    bw, bh = 15*mm, 27*mm
+    c.setFillColor(WHITE)
+    c.roundRect(bx,by,bw,bh,2.5*mm,fill=1,stroke=0)
+    c.setStrokeColor(MID_GREY); c.setLineWidth(.5)
+    c.roundRect(bx,by,bw,bh,2.5*mm,fill=0,stroke=1)
     c.setFillColor(GREEN)
-    c.roundRect(bx + 5*mm, by + 10*mm, 16*mm, 23*mm, 2*mm, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 7)
-    c.drawCentredString(bx + 13*mm, by + 21*mm, "ENERGY")
+    c.roundRect(bx+3*mm,by+6*mm,bw-6*mm,15*mm,1.5*mm,fill=1,stroke=0)
+    c.setFillColor(WHITE); c.setFont("Helvetica-Bold",4.8)
+    c.drawCentredString(bx+bw/2,by+12.5*mm,"ENERGY")
     c.setFillColor(DARK_GREEN)
-    c.roundRect(bx + 9*mm, by + 37*mm, 8*mm, 3*mm, 1.2*mm, fill=1, stroke=0)
+    c.roundRect(bx+5*mm,by+23*mm,5*mm,1.5*mm,.6*mm,fill=1,stroke=0)
 
-    # Small greenery
+    # Small leaves
     c.setFillColor(GREEN)
-    for dx, dy, rr in [(10, 8, 3), (16, 9, 2.5), (22, 7, 3), (94, 7, 3), (100, 9, 2.5)]:
-        c.circle(x + dx*mm, y + dy*mm, rr*mm, fill=1, stroke=0)
+    for dx,dy,r in [(8,7,2.2),(13,6,1.8),(18,7,2.1)]:
+        c.circle(x+dx*mm,y+dy*mm,r*mm,fill=1,stroke=0)
+
 
 def draw_solar_house(c, x, y, scale=1.0):
     w, h = 62*scale, 40*scale
@@ -646,28 +631,31 @@ def draw_service_icon(c, cx, cy, kind):
 
 
 def service_card(c, x, y, w, h, num, title, text, icon_kind):
-    round_box(c, x, y, w, h, WHITE, MID_GREY, 8)
+    """Premium two-column service card: icon left, copy right, no overlaps."""
+    round_box(c, x, y, w, h, WHITE, MID_GREY, 6)
 
-    # Icon circle
+    # Icon panel
+    ix, iy = x+6*mm, y+5*mm
+    iw, ih = 17*mm, h-10*mm
+    c.setFillColor(PALE_GREEN)
+    c.roundRect(ix, iy, iw, ih, 4*mm, fill=1, stroke=0)
     c.setFillColor(LIGHT_GREEN)
-    c.circle(x+12*mm, y+h-11*mm, 7*mm, fill=1, stroke=0)
-    draw_service_icon(c, x+12*mm, y+h-11*mm, icon_kind)
+    c.circle(ix+iw/2, iy+ih/2, 6*mm, fill=1, stroke=0)
+    draw_service_icon(c, ix+iw/2, iy+ih/2, icon_kind)
 
-    # Number
-    c.setFillColor(YELLOW)
-    c.roundRect(x+w-18*mm, y+h-9*mm, 11*mm, 5*mm, 2.5*mm, fill=1, stroke=0)
-    c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 5.8)
-    c.drawCentredString(x+w-12.5*mm, y+h-7.2*mm, num)
+    # Number pill
+    pill(c, x+w-16*mm, y+h-8*mm, 10*mm, 4.8*mm, num, YELLOW, DARK, 5.4)
 
+    tx=x+27*mm
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 8.5)
-    c.drawString(x+22*mm, y+h-8.5*mm, title)
+    c.setFont("Helvetica-Bold",8.2)
+    c.drawString(tx, y+h-9*mm, title)
 
     draw_wrapped_text(
-        c, text, x+8*mm, y+h-19*mm, w-16*mm,
-        "Helvetica", 6.8, 8.3, GREY, 4
+        c, text, tx, y+h-17*mm, w-33*mm,
+        "Helvetica", 6.4, 7.7, GREY, 3
     )
+
 
 # =========================================================
 # PDF
@@ -752,16 +740,17 @@ def generate_pdf():
     c.setFillColor(GREY); c.setFont("Helvetica",10)
     c.drawString(18*mm,PAGE_H-123*mm,"Il tuo progetto, spiegato in modo semplice.")
 
-    draw_pv_scene(c,PAGE_W-128*mm,PAGE_H-174*mm,108*mm,64*mm)
+    draw_pv_scene(c,112*mm,121*mm,80*mm,52*mm)
 
-    round_box(c,18*mm,67*mm,PAGE_W-36*mm,28*mm,WHITE,MID_GREY,8)
-    pill(c,26*mm,84*mm,40*mm,6.5*mm,"ABITAZIONE",GREEN,WHITE,6.2)
-    draw_wrapped_text(c,address,26*mm,76.5*mm,PAGE_W-52*mm,
-                      "Helvetica-Bold",10,12,DARK,2)
+    # Address / project strip
+    round_box(c,18*mm,67*mm,PAGE_W-36*mm,25*mm,WHITE,MID_GREY,8)
+    pill(c,26*mm,83*mm,40*mm,6.5*mm,"ABITAZIONE",GREEN,WHITE,6.2)
+    draw_wrapped_text(c,address,26*mm,75.5*mm,PAGE_W-52*mm,
+                      "Helvetica-Bold",9.5,11,DARK,2)
 
     kpi(c,18*mm,33*mm,53*mm,25*mm,"Potenza FV",f"{decimal(kwp)} kWp",GREEN,"PV")
-    kpi(c,77*mm,33*mm,53*mm,25*mm,"Accumulo",f"{decimal(battery)} kWh",YELLOW,"B")
-    kpi(c,136*mm,33*mm,53*mm,25*mm,"Risparmio annuo",euro(values["annual_saving"]),GREEN,"€")
+    kpi(c,78*mm,33*mm,53*mm,25*mm,"Accumulo",f"{decimal(battery)} kWh",YELLOW,"B")
+    kpi(c,138*mm,33*mm,53*mm,25*mm,"Risparmio annuo",euro(values["annual_saving"]),GREEN,"€")
     draw_footer(c,1); c.showPage()
 
     # -----------------------------------------------------
@@ -787,9 +776,13 @@ def generate_pdf():
         c.setFillColor(GREY); c.setFont("Helvetica",6.4); c.drawString(x+5*mm,y+13*mm,lab)
         c.setFillColor(DARK); c.setFont("Helvetica-Bold",12.5); c.drawString(x+5*mm,y+5*mm,val)
 
-    monthly_chart(c,18*mm,55*mm,PAGE_W-36*mm,78*mm,monthly)
+    # Monthly production occupies the lower half of the page with more visual weight.
+    monthly_chart(c,18*mm,58*mm,PAGE_W-36*mm,86*mm,monthly)
     c.setFillColor(GREY); c.setFont("Helvetica",6.7)
-    c.drawString(18*mm,46*mm,"Stima della produzione elaborata tramite PVGIS in base a localizzazione e parametri inseriti.")
+    c.drawString(18*mm,50*mm,"Stima della produzione elaborata tramite PVGIS in base a localizzazione e parametri inseriti.")
+    c.setFillColor(GREEN); c.setFont("Helvetica-Bold",7)
+    orient = {-90:"EST",0:"SUD",90:"OVEST"}.get(int(aspect),"")
+    c.drawRightString(PAGE_W-18*mm,50*mm,f"ORIENTAMENTO: {orient}  •  INCLINAZIONE: {decimal(angle)}°")
     draw_footer(c,2); c.showPage()
 
     # -----------------------------------------------------
@@ -800,7 +793,17 @@ def generate_pdf():
                   "La simulazione separa l'energia utilizzata direttamente dall'abitazione da quella immessa in rete.",
                   PAGE_H-38*mm)
 
-    donut(c,67*mm,PAGE_H-99*mm,32*mm,values["self_used"],values["export"])
+    donut(c,67*mm,PAGE_H-96*mm,31*mm,values["self_used"],values["export"])
+
+    # Simple energy-flow cue
+    c.setFillColor(LIGHT_GREEN); c.roundRect(112*mm,PAGE_H-116*mm,76*mm,15*mm,5*mm,fill=1,stroke=0)
+    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",7.5)
+    c.drawString(119*mm,PAGE_H-108*mm,"PRODUZIONE")
+    c.setFillColor(GREY); c.setFont("Helvetica",6.5)
+    c.drawString(119*mm,PAGE_H-112.5*mm,f"{number(production)} kWh/anno")
+    c.setFillColor(YELLOW); c.circle(171*mm,PAGE_H-108*mm,2.5*mm,fill=1,stroke=0)
+    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",8)
+    c.drawCentredString(171*mm,PAGE_H-109.7*mm,"→")
 
     # legenda
     c.setFillColor(GREEN); c.rect(111*mm,PAGE_H-84*mm,6*mm,6*mm,fill=1,stroke=0)
@@ -811,18 +814,18 @@ def generate_pdf():
     c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.5); c.drawString(122*mm,PAGE_H-102.5*mm,"Energia immessa")
     c.setFillColor(GREY); c.setFont("Helvetica",7.5); c.drawString(122*mm,PAGE_H-111*mm,f"{number(values['export'])} kWh/anno")
 
-    kpi(c,18*mm,88*mm,53*mm,25*mm,"Autoconsumo",f"{values['self_used']/max(production,1)*100:.0f}%",GREEN,"A")
-    kpi(c,77*mm,88*mm,53*mm,25*mm,"Energia immessa",f"{values['export']/max(production,1)*100:.0f}%",YELLOW,"I")
-    kpi(c,136*mm,88*mm,53*mm,25*mm,"Energia da rete",f"{number(values['grid_purchase'])} kWh",GREEN,"R")
+    kpi(c,18*mm,91*mm,53*mm,25*mm,"Autoconsumo",f"{values['self_used']/max(production,1)*100:.0f}%",GREEN,"A")
+    kpi(c,78*mm,91*mm,53*mm,25*mm,"Energia immessa",f"{values['export']/max(production,1)*100:.0f}%",YELLOW,"I")
+    kpi(c,138*mm,91*mm,53*mm,25*mm,"Energia da rete",f"{number(values['grid_purchase'])} kWh",GREEN,"R")
 
-    round_box(c,18*mm,45*mm,PAGE_W-36*mm,31*mm,LIGHT_GREEN,None,8)
+    round_box(c,18*mm,50*mm,PAGE_W-36*mm,29*mm,LIGHT_GREEN,None,8)
     c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",9.5)
-    c.drawString(27*mm,60*mm,"In parole semplici")
+    c.drawString(27*mm,66*mm,"In parole semplici")
     draw_wrapped_text(c,
         "L'energia prodotta viene prima utilizzata dall'abitazione. "
         "L'eventuale eccedenza viene immessa in rete e valorizzata "
         "secondo il valore inserito nella simulazione.",
-        27*mm,52*mm,PAGE_W-54*mm,"Helvetica",7.5,9.5,DARK,3)
+        27*mm,58*mm,PAGE_W-54*mm,"Helvetica",7.5,9.5,DARK,3)
     draw_footer(c,3); c.showPage()
 
     # -----------------------------------------------------
@@ -838,17 +841,17 @@ def generate_pdf():
     kpi(c,78*mm,PAGE_H-86*mm,55*mm,29*mm,"Rientro stimato",payback,YELLOW,"T")
     kpi(c,138*mm,PAGE_H-86*mm,53*mm,29*mm,"Beneficio 25 anni",euro(values["gross_25"]),GREEN,"€")
 
-    round_box(c,18*mm,96*mm,PAGE_W-36*mm,32*mm,WHITE,MID_GREY,8)
+    round_box(c,18*mm,102*mm,PAGE_W-36*mm,30*mm,WHITE,MID_GREY,8)
     c.setFillColor(DARK); c.setFont("Helvetica-Bold",9.5)
-    c.drawString(27*mm,118*mm,"Composizione dell'investimento")
-    stat_line(c,27*mm,107*mm,"Costo complessivo",euro(cost))
-    stat_line(c,105*mm,107*mm,"Detrazione totale",euro(deduction),GREEN)
-    c.setFillColor(LIGHT_GREEN); c.roundRect(27*mm,99*mm,158*mm,4*mm,2,fill=1,stroke=0)
+    c.drawString(27*mm,122*mm,"Composizione dell'investimento")
+    stat_line(c,27*mm,112*mm,"Costo complessivo",euro(cost))
+    stat_line(c,105*mm,112*mm,"Detrazione totale",euro(deduction),GREEN)
+    c.setFillColor(LIGHT_GREEN); c.roundRect(27*mm,104*mm,158*mm,4*mm,2,fill=1,stroke=0)
     if cost>0:
         dw=min(158*mm,158*mm*deduction/cost)
-        c.setFillColor(GREEN); c.roundRect(27*mm,99*mm,dw,4*mm,2,fill=1,stroke=0)
+        c.setFillColor(GREEN); c.roundRect(27*mm,104*mm,dw,4*mm,2,fill=1,stroke=0)
 
-    economic_chart(c,18*mm,24*mm,PAGE_W-36*mm,62*mm,values["years"])
+    economic_chart(c,18*mm,27*mm,PAGE_W-36*mm,67*mm,values["years"])
     draw_footer(c,4); c.showPage()
 
     # -----------------------------------------------------
@@ -875,16 +878,16 @@ def generate_pdf():
         c.drawString(x+45*mm,ry+3.1*mm,euro(item["benefit"]))
         c.setFillColor(GREEN); c.drawString(x+105*mm,ry+3.1*mm,euro(item["cumulative"]))
 
-    round_box(c,18*mm,68*mm,PAGE_W-36*mm,32*mm,LIGHT_GREEN,None,8)
+    round_box(c,18*mm,75*mm,PAGE_W-36*mm,32*mm,LIGHT_GREEN,None,8)
     c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",8.8)
-    c.drawString(27*mm,89*mm,"BENEFICIO CUMULATO STIMATO A 25 ANNI")
-    c.setFillColor(GREEN); c.setFont("Helvetica-Bold",19)
-    c.drawString(27*mm,77*mm,euro(values["gross_25"]))
+    c.drawString(27*mm,96*mm,"BENEFICIO CUMULATO STIMATO A 25 ANNI")
+    c.setFillColor(GREEN); c.setFont("Helvetica-Bold",20)
+    c.drawString(27*mm,83*mm,euro(values["gross_25"]))
     c.setFillColor(DARK); c.setFont("Helvetica",7.5)
-    c.drawRightString(PAGE_W-27*mm,79*mm,"Beneficio netto: "+euro(values["net_25"]))
+    c.drawRightString(PAGE_W-27*mm,84*mm,"Beneficio netto: "+euro(values["net_25"]))
 
     c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.5)
-    c.drawString(18*mm,57*mm,"Assunzioni della simulazione")
+    c.drawString(18*mm,65*mm,"Assunzioni della simulazione")
     assumptions=[
         "Degrado produzione: 0,5% annuo",
         "Crescita prezzo energia acquistata: 2% annuo",
@@ -892,7 +895,7 @@ def generate_pdf():
         f"Valore energia immessa: {decimal(export_price)} €/kWh",
         f"Profilo consumi: {profile_label}"
     ]
-    yy=50*mm
+    yy=59*mm
     for txt in assumptions:
         c.setFillColor(GREY); c.setFont("Helvetica",6.8)
         c.drawString(18*mm,yy,"• "+txt); yy-=4.7*mm
@@ -918,14 +921,14 @@ def generate_pdf():
     ]
     for i,(num,title,txt,icon_kind) in enumerate(services):
         col=i%2; row=i//2
-        service_card(c,18*mm+col*88*mm,PAGE_H-74*mm-row*36*mm,82*mm,30*mm,num,title,txt,icon_kind)
+        service_card(c,18*mm+col*88*mm,PAGE_H-75*mm-row*34*mm,82*mm,28*mm,num,title,txt,icon_kind)
 
-    round_box(c,18*mm,29*mm,PAGE_W-36*mm,25*mm,LIGHT_YELLOW,None,8)
+    round_box(c,18*mm,30*mm,PAGE_W-36*mm,22*mm,LIGHT_YELLOW,None,8)
     c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.7)
-    c.drawString(27*mm,46*mm,"Garanzie indicative")
+    c.drawString(27*mm,45*mm,"Garanzie indicative")
     c.setFont("Helvetica",6.8)
     c.drawString(27*mm,38*mm,"✓ Pannelli: prodotto fino a 25 anni    ✓ Prestazione pannelli fino a 30 anni")
-    c.drawString(27*mm,33*mm,"✓ Inverter fino a 12 anni               ✓ Batterie fino a 11 anni")
+    c.drawString(27*mm,33.5*mm,"✓ Inverter fino a 12 anni               ✓ Batterie fino a 11 anni")
     draw_footer(c,6); c.showPage()
 
     # -----------------------------------------------------
@@ -941,31 +944,38 @@ def generate_pdf():
     c.setFont("Helvetica",8.5)
     c.drawString(18*mm,PAGE_H-76*mm,"Parliamone insieme e costruiamo la soluzione più adatta.")
 
-    round_box(c,18*mm,80*mm,PAGE_W-36*mm,67*mm,WHITE,None,10)
-    c.setFillColor(DARK); c.setFont("Helvetica-Bold",17)
-    c.drawString(29*mm,129*mm,"Simone Alfarano")
+    # Centered contact panel
+    round_box(c,18*mm,77*mm,PAGE_W-36*mm,73*mm,WHITE,None,10)
+    c.setFillColor(DARK); c.setFont("Helvetica-Bold",18)
+    c.drawString(29*mm,133*mm,"Simone Alfarano")
     c.setFillColor(GREEN); c.setFont("Helvetica-Bold",8)
-    c.drawString(29*mm,119*mm,"RESPONSABILE COMMERCIALE")
-    c.setFillColor(GREY); c.setFont("Helvetica",7.8)
+    c.drawString(29*mm,123*mm,"RESPONSABILE COMMERCIALE")
+    c.setFillColor(MID_GREY); c.setLineWidth(.5)
+    c.line(29*mm,118*mm,PAGE_W-29*mm,118*mm)
 
+    # Contact rows with visual markers
     contact_lines=[
-        "Energia Giusta",
-        "Partner ENI Plenitude",
-        "Tel. / WhatsApp: 351.7478652",
-        "simone.alfarano@energiagiusta.it",
-        "www.energiagiusta.it"
+        ("AZIENDA","Energia Giusta"),
+        ("PARTNER","ENI Plenitude"),
+        ("TELEFONO","351.7478652"),
+        ("EMAIL","simone.alfarano@energiagiusta.it"),
+        ("WEB","www.energiagiusta.it")
     ]
-    yy=108*mm
-    for line in contact_lines:
-        c.drawString(29*mm,yy,line); yy-=7*mm
+    yy=111*mm
+    for label,line in contact_lines:
+        c.setFillColor(GREY); c.setFont("Helvetica-Bold",5.8)
+        c.drawString(29*mm,yy,label)
+        c.setFillColor(DARK); c.setFont("Helvetica",7.8)
+        c.drawString(55*mm,yy,line)
+        yy-=7*mm
 
-    pill(c,29*mm,58*mm,67*mm,12*mm,"CONTATTAMI PER INFO",YELLOW,DARK,8.5)
+    pill(c,29*mm,55*mm,67*mm,12*mm,"CONTATTAMI PER INFO",YELLOW,DARK,8.5)
 
     c.setFillColor(WHITE); c.setFont("Helvetica",6.2)
     draw_wrapped_text(c,
         "Stima commerciale. Il risultato dipende da tariffe, profilo reale dei consumi, "
         "condizioni di scambio/ritiro, ombreggiamento e altri fattori. Non è un preventivo finanziario.",
-        18*mm,22*mm,PAGE_W-36*mm,"Helvetica",6.2,8,WHITE,4)
+        18*mm,20*mm,PAGE_W-36*mm,"Helvetica",6.2,8,WHITE,4)
 
     c.save()
     buf.seek(0)
