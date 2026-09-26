@@ -217,6 +217,94 @@ def draw_sun(c, x, y, size=24):
         c.line(x+math.cos(a)*size*.42, y+math.sin(a)*size*.42,
                x+math.cos(a)*size*.72, y+math.sin(a)*size*.72)
 
+def draw_pv_scene(c, x, y, w, h):
+    """Modern vector hero illustration inspired by a real residential PV installation."""
+    c.setFillColor(colors.white)
+    c.roundRect(x, y, w, h, 7*mm, fill=1, stroke=0)
+
+    # Sky / soft background
+    c.setFillColor(PALE_GREEN)
+    c.roundRect(x + 2*mm, y + 2*mm, w - 4*mm, h - 4*mm, 6*mm, fill=1, stroke=0)
+
+    # Sun
+    sx, sy = x + w - 24*mm, y + h - 18*mm
+    c.setFillColor(YELLOW)
+    c.circle(sx, sy, 8*mm, fill=1, stroke=0)
+    c.setStrokeColor(YELLOW)
+    c.setLineWidth(1.1)
+    for a in range(0, 360, 45):
+        import math
+        r1, r2 = 10*mm, 14*mm
+        x1 = sx + math.cos(math.radians(a))*r1
+        y1 = sy + math.sin(math.radians(a))*r1
+        x2 = sx + math.cos(math.radians(a))*r2
+        y2 = sy + math.sin(math.radians(a))*r2
+        c.line(x1, y1, x2, y2)
+
+    # Ground
+    c.setFillColor(colors.white)
+    c.roundRect(x + 5*mm, y + 5*mm, w - 10*mm, 20*mm, 4*mm, fill=1, stroke=0)
+
+    # House body
+    hx, hy = x + 28*mm, y + 13*mm
+    hw, hh = 72*mm, 34*mm
+    c.setFillColor(colors.white)
+    c.rect(hx, hy, hw, hh, fill=1, stroke=0)
+
+    # Roof
+    c.setFillColor(DARK_GREEN)
+    p = c.beginPath()
+    p.moveTo(hx - 6*mm, hy + hh)
+    p.lineTo(hx + hw/2, hy + hh + 24*mm)
+    p.lineTo(hx + hw + 6*mm, hy + hh)
+    p.close()
+    c.drawPath(p, fill=1, stroke=0)
+
+    # PV panels on roof
+    panel_x = hx + 18*mm
+    panel_y = hy + hh + 5*mm
+    panel_w = 48*mm
+    panel_h = 15*mm
+    c.saveState()
+    c.translate(panel_x, panel_y)
+    c.rotate(20)
+    c.setFillColor(colors.HexColor("#17324D"))
+    c.roundRect(0, 0, panel_w, panel_h, 1.5*mm, fill=1, stroke=0)
+    c.setStrokeColor(colors.HexColor("#86A6BC"))
+    c.setLineWidth(0.45)
+    for xx in [panel_w/4, panel_w/2, 3*panel_w/4]:
+        c.line(xx, 0, xx, panel_h)
+    for yy in [panel_h/3, 2*panel_h/3]:
+        c.line(0, yy, panel_w, yy)
+    c.restoreState()
+
+    # Windows / door
+    c.setFillColor(LIGHT_GREEN)
+    c.rect(hx + 10*mm, hy + 18*mm, 13*mm, 12*mm, fill=1, stroke=0)
+    c.rect(hx + 28*mm, hy + 18*mm, 13*mm, 12*mm, fill=1, stroke=0)
+    c.setFillColor(DARK_GREEN)
+    c.roundRect(hx + 52*mm, hy, 13*mm, 25*mm, 1.5*mm, fill=1, stroke=0)
+
+    # Battery cabinet, cleaner than the old school icon
+    bx, by = x + 116*mm, y + 13*mm
+    c.setFillColor(colors.white)
+    c.roundRect(bx, by, 26*mm, 43*mm, 3.5*mm, fill=1, stroke=0)
+    c.setStrokeColor(MID_GREY)
+    c.setLineWidth(0.6)
+    c.roundRect(bx, by, 26*mm, 43*mm, 3.5*mm, fill=0, stroke=1)
+    c.setFillColor(GREEN)
+    c.roundRect(bx + 5*mm, by + 10*mm, 16*mm, 23*mm, 2*mm, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 7)
+    c.drawCentredString(bx + 13*mm, by + 21*mm, "ENERGY")
+    c.setFillColor(DARK_GREEN)
+    c.roundRect(bx + 9*mm, by + 37*mm, 8*mm, 3*mm, 1.2*mm, fill=1, stroke=0)
+
+    # Small greenery
+    c.setFillColor(GREEN)
+    for dx, dy, rr in [(10, 8, 3), (16, 9, 2.5), (22, 7, 3), (94, 7, 3), (100, 9, 2.5)]:
+        c.circle(x + dx*mm, y + dy*mm, rr*mm, fill=1, stroke=0)
+
 def draw_solar_house(c, x, y, scale=1.0):
     w, h = 62*scale, 40*scale
     c.setFillColor(LIGHT_GREEN)
@@ -310,34 +398,93 @@ def stat_line(c, x, y, label, value, color=DARK):
     c.drawRightString(x+48*mm, y, value)
 
 def monthly_chart(c, x, y, w, h, monthly):
-    round_box(c, x, y, w, h, WHITE, MID_GREY, 8)
+    """Monthly PV production chart. Accepts dict/list data and preserves real month values."""
+    labels = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU",
+              "LUG", "AGO", "SET", "OTT", "NOV", "DIC"]
+
+    values = []
+    if isinstance(monthly, dict):
+        # Accept common PVGIS shapes: {"Jan": value}, {"1": value}, etc.
+        for i, lab in enumerate(labels, 1):
+            candidates = [
+                lab, lab.lower(),
+                str(i), f"{i:02d}",
+                ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][i-1]
+            ]
+            val = None
+            for key in candidates:
+                if key in monthly:
+                    val = monthly[key]
+                    break
+            try:
+                values.append(float(val or 0))
+            except (TypeError, ValueError):
+                values.append(0.0)
+    elif isinstance(monthly, list):
+        for item in monthly[:12]:
+            if isinstance(item, dict):
+                val = item.get("E_m") or item.get("energy") or item.get("value") or 0
+            else:
+                val = item
+            try:
+                values.append(float(val or 0))
+            except (TypeError, ValueError):
+                values.append(0.0)
+        values += [0.0] * (12 - len(values))
+    else:
+        values = [0.0] * 12
+
+    # If the input accidentally contains one annual value, do not repeat it:
+    # show an empty/diagnostic chart rather than creating a false monthly series.
+    if len(set(round(v, 6) for v in values)) == 1 and values[0] != 0:
+        values = [0.0] * 12
+
+    maxv = max(values) if values else 0
+    if maxv <= 0:
+        maxv = 1
+
+    c.setFillColor(LIGHT_GREY)
+    c.roundRect(x, y, w, h, 5*mm, fill=1, stroke=0)
+
+    c.setFont("Helvetica-Bold", 9)
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(x+8*mm, y+h-11*mm, "Produzione fotovoltaica mensile")
+    c.drawString(x + 7*mm, y + h - 10*mm, "Produzione fotovoltaica mensile")
+
+    chart_x = x + 9*mm
+    chart_y = y + 13*mm
+    chart_w = w - 18*mm
+    chart_h = h - 31*mm
+
+    # Grid
+    c.setStrokeColor(MID_GREY)
+    c.setLineWidth(0.45)
+    for i in range(5):
+        gy = chart_y + chart_h * i / 4
+        c.line(chart_x, gy, chart_x + chart_w, gy)
+
+    slot = chart_w / 12.0
+    bar_w = slot * 0.56
+
+    c.setFont("Helvetica", 6.5)
+    for i, (lab, val) in enumerate(zip(labels, values)):
+        bx = chart_x + i * slot + (slot - bar_w) / 2
+        bh = chart_h * val / maxv if maxv else 0
+
+        c.setFillColor(GREEN if val > 0 else MID_GREY)
+        c.roundRect(bx, chart_y, bar_w, max(bh, 0.8*mm), 1.2*mm, fill=1, stroke=0)
+
+        c.setFillColor(GREY)
+        c.drawCentredString(bx + bar_w/2, chart_y - 4.5*mm, lab)
+
+        if val > 0:
+            c.setFillColor(DARK)
+            c.setFont("Helvetica", 5.7)
+            c.drawCentredString(bx + bar_w/2, chart_y + bh + 2*mm, f"{val:,.0f}".replace(",", "."))
+            c.setFont("Helvetica", 6.5)
+
     c.setFillColor(GREY)
     c.setFont("Helvetica", 6.5)
-    c.drawRightString(x+w-8*mm, y+h-11*mm, "kWh")
-
-    left, bottom = x+12*mm, y+14*mm
-    cw, ch = w-18*mm, h-31*mm
-    maximum = max(max(monthly or [1]), 1)
-    c.setStrokeColor(MID_GREY)
-    c.setLineWidth(.35)
-    for i in range(4):
-        gy = bottom+ch*i/3
-        c.line(left, gy, left+cw, gy)
-
-    months = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"]
-    slot = cw/12
-    bw = slot*.55
-    for i, val in enumerate(monthly[:12]):
-        bx = left+i*slot+(slot-bw)/2
-        bh = ch*val/maximum
-        c.setFillColor(GREEN if i not in (5,6,7) else MID_GREEN)
-        c.roundRect(bx, bottom, bw, bh, 2, fill=1, stroke=0)
-        c.setFillColor(GREY)
-        c.setFont("Helvetica", 5.7)
-        c.drawCentredString(bx+bw/2, bottom-8, months[i])
+    c.drawString(chart_x, y + 5.5*mm, "kWh prodotti")
 
 def donut(c, cx, cy, r, self_used, export):
     total=max(self_used+export,1)
