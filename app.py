@@ -574,7 +574,9 @@ def draw_service_icon(c, cx, cy, kind):
         c.rect(cx-2.2*mm, cy-1.5*mm, 4.4*mm, 3.5*mm, fill=0, stroke=1)
 
     elif kind == "design":  # ruler
-        c.rotate(45, cx, cy)
+        c.translate(cx, cy)
+        c.rotate(45)
+        c.translate(-cx, -cy)
         c.roundRect(cx-2.5*mm, cy-8*mm, 5*mm, 16*mm, 1.2*mm, fill=0, stroke=1)
         for yy in [-5, -2, 1, 4]:
             c.line(cx, cy+yy*mm, cx+2*mm, cy+yy*mm)
