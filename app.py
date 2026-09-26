@@ -128,7 +128,36 @@ def calculate_values(d):
 @app.post("/api/calculate")
 def calculate():
     d = request.get_json(force=True)
-    return jsonify(calculate_values(d))
+    result = calculate_values(d)
+
+    # Pass through monthly PVGIS data when available, so the PDF/frontend can reuse it.
+    monthly = d.get("monthly")
+    if isinstance(monthly, list) and len(monthly) == 12:
+        result["monthly_kwh"] = monthly
+    else:
+        try:
+            if d.get("lat") is not None and d.get("lon") is not None and float(d.get("kwp", 0)) > 0:
+                params = {
+                    "lat": float(d["lat"]),
+                    "lon": float(d["lon"]),
+                    "peakpower": float(d["kwp"]),
+                    "loss": float(d.get("loss", 14)),
+                    "angle": float(d.get("angle", 30)),
+                    "aspect": float(d.get("aspect", 0)),
+                    "usehorizon": 1,
+                    "outputformat": "json",
+                }
+                pv = pvgis(params)
+                result["monthly_kwh"] = [
+                    float(item["E_m"])
+                    for item in pv["outputs"]["monthly"]["fixed"]
+                ]
+            else:
+                result["monthly_kwh"] = []
+        except Exception:
+            result["monthly_kwh"] = []
+
+    return jsonify(result)
 
 # =========================================================
 # PALETTE
@@ -528,14 +557,115 @@ def economic_chart(c, x, y, w, h, years):
         c.setFillColor(GREY); c.setFont("Helvetica",5.8)
         c.drawCentredString(px,bottom-8,str(i+1))
 
-def service_card(c, x, y, w, h, num, title, text):
-    round_box(c,x,y,w,h,WHITE,MID_GREY,8)
-    c.setFillColor(GREEN); c.circle(x+10*mm,y+h-11*mm,6*mm,fill=1,stroke=0)
-    c.setFillColor(WHITE); c.setFont("Helvetica-Bold",7)
-    c.drawCentredString(x+10*mm,y+h-13.2*mm,num)
-    c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.3)
-    c.drawString(x+20*mm,y+h-8.5*mm,title)
-    draw_wrapped_text(c,text,x+20*mm,y+h-16*mm,w-25*mm,"Helvetica",6.7,8.5,GREY,4)
+def draw_service_icon(c, cx, cy, kind):
+    """Small clean vector icons for the commercial-service cards."""
+    c.saveState()
+    c.setStrokeColor(DARK_GREEN)
+    c.setFillColor(DARK_GREEN)
+    c.setLineWidth(1.25)
+
+    if kind == "survey":  # pin + house
+        c.circle(cx, cy+2.5*mm, 4*mm, fill=0, stroke=1)
+        p = c.beginPath()
+        p.moveTo(cx-4*mm, cy)
+        p.lineTo(cx, cy-6*mm)
+        p.lineTo(cx+4*mm, cy)
+        c.drawPath(p, fill=0, stroke=1)
+        c.rect(cx-2.2*mm, cy-1.5*mm, 4.4*mm, 3.5*mm, fill=0, stroke=1)
+
+    elif kind == "design":  # ruler
+        c.rotate(45, cx, cy)
+        c.roundRect(cx-2.5*mm, cy-8*mm, 5*mm, 16*mm, 1.2*mm, fill=0, stroke=1)
+        for yy in [-5, -2, 1, 4]:
+            c.line(cx, cy+yy*mm, cx+2*mm, cy+yy*mm)
+
+    elif kind == "install":  # solar panel
+        p = c.beginPath()
+        p.moveTo(cx-7*mm, cy+4*mm)
+        p.lineTo(cx+7*mm, cy+4*mm)
+        p.lineTo(cx+5*mm, cy-5*mm)
+        p.lineTo(cx-5*mm, cy-5*mm)
+        p.close()
+        c.drawPath(p, fill=0, stroke=1)
+        c.line(cx, cy+4*mm, cx, cy-5*mm)
+        c.line(cx-4*mm, cy, cx+6*mm, cy)
+        c.line(cx-3*mm, cy-5*mm, cx-1*mm, cy-9*mm)
+        c.line(cx+3*mm, cy-5*mm, cx+1*mm, cy-9*mm)
+
+    elif kind == "gse":  # document/check
+        c.roundRect(cx-5.5*mm, cy-7*mm, 11*mm, 14*mm, 1.5*mm, fill=0, stroke=1)
+        c.line(cx-3*mm, cy+3*mm, cx+3*mm, cy+3*mm)
+        c.line(cx-3*mm, cy, cx+2*mm, cy)
+        c.line(cx-3*mm, cy-3*mm, cx-1*mm, cy-3*mm)
+        c.line(cx, cy-3*mm, cx+3*mm, cy-3*mm)
+
+    elif kind == "tax":  # euro/document
+        c.circle(cx, cy, 5.5*mm, fill=0, stroke=1)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(cx, cy-2.7*mm, "€")
+
+    elif kind == "monitor":  # screen
+        c.roundRect(cx-7*mm, cy-5*mm, 14*mm, 10*mm, 1.5*mm, fill=0, stroke=1)
+        p = c.beginPath()
+        p.moveTo(cx-5*mm, cy-1*mm)
+        p.lineTo(cx-2*mm, cy+2*mm)
+        p.lineTo(cx, cy)
+        p.lineTo(cx+3*mm, cy+3.5*mm)
+        c.drawPath(p, fill=0, stroke=1)
+        c.line(cx-3*mm, cy-8*mm, cx+3*mm, cy-8*mm)
+
+    elif kind == "warranty":  # shield
+        p = c.beginPath()
+        p.moveTo(cx, cy+7*mm)
+        p.lineTo(cx+6*mm, cy+4*mm)
+        p.lineTo(cx+5*mm, cy-3*mm)
+        p.lineTo(cx, cy-7*mm)
+        p.lineTo(cx-5*mm, cy-3*mm)
+        p.lineTo(cx-6*mm, cy+4*mm)
+        p.close()
+        c.drawPath(p, fill=0, stroke=1)
+        c.line(cx-2.5*mm, cy, cx-0.5*mm, cy-2*mm)
+        c.line(cx-0.5*mm, cy-2*mm, cx+3.5*mm, cy+3*mm)
+
+    elif kind == "recycle":  # recycle arrows
+        for a in (90, 210, 330):
+            ang = math.radians(a)
+            x1 = cx + math.cos(ang)*2*mm
+            y1 = cy + math.sin(ang)*2*mm
+            x2 = cx + math.cos(ang)*7*mm
+            y2 = cy + math.sin(ang)*7*mm
+            c.line(x1, y1, x2, y2)
+            left = ang + math.radians(145)
+            right = ang - math.radians(145)
+            c.line(x2, y2, x2 + math.cos(left)*2.2*mm, y2 + math.sin(left)*2.2*mm)
+            c.line(x2, y2, x2 + math.cos(right)*2.2*mm, y2 + math.sin(right)*2.2*mm)
+
+    c.restoreState()
+
+
+def service_card(c, x, y, w, h, num, title, text, icon_kind):
+    round_box(c, x, y, w, h, WHITE, MID_GREY, 8)
+
+    # Icon circle
+    c.setFillColor(LIGHT_GREEN)
+    c.circle(x+12*mm, y+h-11*mm, 7*mm, fill=1, stroke=0)
+    draw_service_icon(c, x+12*mm, y+h-11*mm, icon_kind)
+
+    # Number
+    c.setFillColor(YELLOW)
+    c.roundRect(x+w-18*mm, y+h-9*mm, 11*mm, 5*mm, 2.5*mm, fill=1, stroke=0)
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 5.8)
+    c.drawCentredString(x+w-12.5*mm, y+h-7.2*mm, num)
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 8.5)
+    c.drawString(x+22*mm, y+h-8.5*mm, title)
+
+    draw_wrapped_text(
+        c, text, x+8*mm, y+h-19*mm, w-16*mm,
+        "Helvetica", 6.8, 8.3, GREY, 4
+    )
 
 # =========================================================
 # PDF
@@ -546,7 +676,7 @@ def generate_pdf():
     d=request.get_json(force=True)
     values=calculate_values(d)
 
-    address=d.get("address","Abitazione")
+    address=str(d.get("address","Abitazione")).upper()
     kwp=float(d.get("kwp",0))
     battery=float(d.get("battery",0))
     angle=float(d.get("angle",30))
@@ -558,8 +688,39 @@ def generate_pdf():
     deduction=float(d.get("deduction",0))
     energy_price=float(d.get("energy_price",0.25))
     export_price=float(d.get("export_price",0.10))
-    monthly=d.get("monthly",[]) or [production/12 for _ in range(12)]
+    monthly = d.get("monthly", None)
     profile=d.get("profile","equilibrato")
+
+    # Se il frontend non passa i dati mensili, prova a recuperarli direttamente da PVGIS.
+    # In questo modo il PDF non mostra più 12 mesi identici.
+    if not isinstance(monthly, list) or len(monthly) != 12:
+        monthly = None
+        try:
+            if d.get("lat") is not None and d.get("lon") is not None and kwp > 0:
+                pv_params = {
+                    "lat": float(d["lat"]),
+                    "lon": float(d["lon"]),
+                    "peakpower": kwp,
+                    "loss": loss,
+                    "angle": angle,
+                    "aspect": aspect,
+                    "usehorizon": 1,
+                    "outputformat": "json",
+                }
+                pv_data = pvgis(pv_params)
+                monthly = [
+                    float(item["E_m"])
+                    for item in pv_data["outputs"]["monthly"]["fixed"]
+                ]
+        except Exception:
+            monthly = None
+
+    # Ultimo fallback: curva stagionale prudenziale, mai 12 valori uguali.
+    if not isinstance(monthly, list) or len(monthly) != 12:
+        seasonal = [0.055, 0.060, 0.075, 0.090, 0.105, 0.115,
+                    0.120, 0.115, 0.095, 0.080, 0.050, 0.040]
+        total = sum(seasonal)
+        monthly = [production * v / total for v in seasonal]
 
     profile_labels={"giorno":"Prevalenza diurna","equilibrato":"Equilibrato","sera":"Prevalenza serale"}
     profile_label=profile_labels.get(profile,"Equilibrato")
@@ -589,15 +750,14 @@ def generate_pdf():
     c.setFillColor(GREY); c.setFont("Helvetica",10)
     c.drawString(18*mm,PAGE_H-123*mm,"Il tuo progetto, spiegato in modo semplice.")
 
-    draw_solar_house(c,PAGE_W-91*mm,PAGE_H-171*mm,.82)
-    draw_battery(c,PAGE_W-34*mm,PAGE_H-167*mm,23,40)
+    draw_pv_scene(c,PAGE_W-128*mm,PAGE_H-174*mm,108*mm,64*mm)
 
     round_box(c,18*mm,67*mm,PAGE_W-36*mm,28*mm,WHITE,MID_GREY,8)
     pill(c,26*mm,84*mm,40*mm,6.5*mm,"ABITAZIONE",GREEN,WHITE,6.2)
     draw_wrapped_text(c,address,26*mm,76.5*mm,PAGE_W-52*mm,
                       "Helvetica-Bold",10,12,DARK,2)
 
-    kpi(c,18*mm,33*mm,53*mm,25*mm,"Potenza FV",f"{decimal(kwp)} kWp",GREEN,"☀")
+    kpi(c,18*mm,33*mm,53*mm,25*mm,"Potenza FV",f"{decimal(kwp)} kWp",GREEN,"PV")
     kpi(c,77*mm,33*mm,53*mm,25*mm,"Accumulo",f"{decimal(battery)} kWh",YELLOW,"B")
     kpi(c,136*mm,33*mm,53*mm,25*mm,"Risparmio annuo",euro(values["annual_saving"]),GREEN,"€")
     draw_footer(c,1); c.showPage()
@@ -745,18 +905,18 @@ def generate_pdf():
                   PAGE_H-38*mm)
 
     services=[
-        ("01","Sopralluogo","Verifica degli spazi, della copertura e delle condizioni di installazione."),
-        ("02","Progettazione","Dimensionamento dell'impianto in funzione dei consumi e della produzione stimata."),
-        ("03","Installazione","Installatori specializzati, messa in servizio e avviamento dell'impianto."),
-        ("04","Pratiche GSE","Gestione delle pratiche necessarie per l'impianto e la valorizzazione dell'energia."),
-        ("05","Detrazione fiscale","Supporto nella gestione della documentazione relativa alla detrazione prevista."),
-        ("06","Monitoraggio","App per controllare produzione, consumi e funzionamento dell'impianto."),
-        ("07","Garanzie","Pannelli: prodotto fino a 25 anni e prestazione fino a 30 anni; inverter fino a 12 anni."),
-        ("08","Fine vita","Gestione dello smaltimento dei moduli fotovoltaici e dell'inverter a fine vita.")
+        ("01","Sopralluogo","Verifica degli spazi, della copertura e delle condizioni di installazione.","survey"),
+        ("02","Progettazione","Dimensionamento dell'impianto in funzione dei consumi e della produzione stimata.","design"),
+        ("03","Installazione","Installatori specializzati, messa in servizio e avviamento dell'impianto.","install"),
+        ("04","Pratiche GSE","Gestione delle pratiche necessarie per l'impianto e la valorizzazione dell'energia.","gse"),
+        ("05","Detrazione fiscale","Supporto nella gestione della documentazione relativa alla detrazione prevista.","tax"),
+        ("06","Monitoraggio","App per controllare produzione, consumi e funzionamento dell'impianto.","monitor"),
+        ("07","Garanzie","Pannelli: prodotto fino a 25 anni e prestazione fino a 30 anni; inverter fino a 12 anni.","warranty"),
+        ("08","Fine vita","Gestione dello smaltimento dei moduli fotovoltaici e dell'inverter a fine vita.","recycle")
     ]
-    for i,(num,title,txt) in enumerate(services):
+    for i,(num,title,txt,icon_kind) in enumerate(services):
         col=i%2; row=i//2
-        service_card(c,18*mm+col*88*mm,PAGE_H-74*mm-row*36*mm,82*mm,30*mm,num,title,txt)
+        service_card(c,18*mm+col*88*mm,PAGE_H-74*mm-row*36*mm,82*mm,30*mm,num,title,txt,icon_kind)
 
     round_box(c,18*mm,29*mm,PAGE_W-36*mm,25*mm,LIGHT_YELLOW,None,8)
     c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.7)
@@ -779,11 +939,11 @@ def generate_pdf():
     c.setFont("Helvetica",8.5)
     c.drawString(18*mm,PAGE_H-76*mm,"Parliamone insieme e costruiamo la soluzione più adatta.")
 
-    round_box(c,18*mm,69*mm,PAGE_W-36*mm,67*mm,WHITE,None,10)
+    round_box(c,18*mm,80*mm,PAGE_W-36*mm,67*mm,WHITE,None,10)
     c.setFillColor(DARK); c.setFont("Helvetica-Bold",17)
-    c.drawString(29*mm,118*mm,"Simone Alfarano")
+    c.drawString(29*mm,129*mm,"Simone Alfarano")
     c.setFillColor(GREEN); c.setFont("Helvetica-Bold",8)
-    c.drawString(29*mm,108*mm,"RESPONSABILE COMMERCIALE")
+    c.drawString(29*mm,119*mm,"RESPONSABILE COMMERCIALE")
     c.setFillColor(GREY); c.setFont("Helvetica",7.8)
 
     contact_lines=[
@@ -793,11 +953,11 @@ def generate_pdf():
         "simone.alfarano@energiagiusta.it",
         "www.energiagiusta.it"
     ]
-    yy=97*mm
+    yy=108*mm
     for line in contact_lines:
         c.drawString(29*mm,yy,line); yy-=7*mm
 
-    pill(c,29*mm,48*mm,67*mm,12*mm,"CONTATTAMI PER INFO",YELLOW,DARK,8.5)
+    pill(c,29*mm,58*mm,67*mm,12*mm,"CONTATTAMI PER INFO",YELLOW,DARK,8.5)
 
     c.setFillColor(WHITE); c.setFont("Helvetica",6.2)
     draw_wrapped_text(c,
