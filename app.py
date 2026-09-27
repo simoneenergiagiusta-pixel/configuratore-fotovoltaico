@@ -635,7 +635,7 @@ def economic_chart(c, x, y, w, h, years, net_cost=0, payback_years=None):
 
         # Freccia/etichetta vicino al punto esatto.
         label_x = min(px+5*mm, left+cw-39*mm)
-        label_y = min(py+4*mm, bottom+ch-8*mm)
+        label_y = min(py+5.5*mm, bottom+ch-6*mm)
         c.setFillColor(DARK_GREEN)
         c.setFont("Helvetica-Bold",6.4)
         c.drawString(label_x, label_y, "Rientro: " + pb_label)
@@ -648,7 +648,7 @@ def economic_chart(c, x, y, w, h, years, net_cost=0, payback_years=None):
         c.drawCentredString(px,bottom-8,str(i+1))
     c.setFillColor(GREY)
     c.setFont("Helvetica",5.8)
-    c.drawString(left+cw-35*mm, bottom-8, "anni")
+    c.drawCentredString(left+cw/2, bottom-12.5*mm, "anni")
 
 def draw_contact_icon(c, cx, cy, kind):
     """Icone vettoriali semplici per la sezione contatti."""
@@ -658,18 +658,18 @@ def draw_contact_icon(c, cx, cy, kind):
     c.setLineWidth(1.15)
 
     if kind == "phone":
-        # Cornetta telefonica moderna, più leggibile anche in stampa.
+        # Cornetta telefonica pulita e riconoscibile.
         c.setLineCap(1)
         c.setLineJoin(1)
-        c.setLineWidth(2.3)
+        c.setLineWidth(2.0)
         p = c.beginPath()
-        p.moveTo(cx-4.2*mm, cy+3.8*mm)
-        p.curveTo(cx-5.8*mm, cy+1.0*mm, cx-3.7*mm, cy-3.0*mm, cx-0.5*mm, cy-4.4*mm)
-        p.curveTo(cx+2.2*mm, cy-5.5*mm, cx+4.6*mm, cy-3.8*mm, cx+5.0*mm, cy-1.5*mm)
+        p.moveTo(cx-4.8*mm, cy+3.5*mm)
+        p.curveTo(cx-2.5*mm, cy+5.0*mm, cx+2.5*mm, cy+5.0*mm, cx+4.8*mm, cy+3.5*mm)
+        p.curveTo(cx+3.6*mm, cy-1.0*mm, cx+1.0*mm, cy-3.6*mm, cx-3.5*mm, cy-4.8*mm)
         c.drawPath(p, fill=0, stroke=1)
-        c.setLineWidth(3.0)
-        c.line(cx-4.2*mm, cy+3.8*mm, cx-1.8*mm, cy+1.9*mm)
-        c.line(cx+2.9*mm, cy-1.4*mm, cx+5.0*mm, cy-1.5*mm)
+        c.setLineWidth(2.8)
+        c.line(cx-4.8*mm, cy+3.5*mm, cx-2.8*mm, cy+1.8*mm)
+        c.line(cx+2.8*mm, cy+1.8*mm, cx+4.8*mm, cy+3.5*mm)
         c.setLineCap(0)
     elif kind == "mail":
         c.roundRect(cx-5.5*mm,cy-3.8*mm,11*mm,7.6*mm,1.2*mm,fill=0,stroke=1)
@@ -919,11 +919,13 @@ def generate_pdf():
         c.setFillColor(DARK); c.setFont("Helvetica-Bold",14); c.drawString(x+5*mm,y+5.3*mm,val)
 
     monthly_chart(c,18*mm,53*mm,PAGE_W-36*mm,94*mm,monthly)
-    c.setFillColor(GREY); c.setFont("Helvetica",7.5)
-    c.drawString(18*mm,49*mm,"Stima della produzione elaborata tramite PVGIS in base a localizzazione e parametri inseriti.")
-    c.setFillColor(GREEN); c.setFont("Helvetica-Bold",7.2)
+    c.setFillColor(GREY); c.setFont("Helvetica",7.0)
+    c.drawString(18*mm,48.5*mm,"Produzione stimata tramite PVGIS 5.3, strumento ufficiale della Commissione Europea – Joint Research Centre (JRC).")
+    c.setFont("Helvetica-Oblique",6.7)
+    c.drawString(18*mm,43.8*mm,"La produzione effettiva può variare in funzione di condizioni meteo, ombreggiamenti, temperatura, disponibilità dell'impianto e altre condizioni reali.")
+    c.setFillColor(GREEN); c.setFont("Helvetica-Bold",7.0)
     orient = {-90:"EST",0:"SUD",90:"OVEST"}.get(int(aspect),"")
-    c.drawRightString(PAGE_W-18*mm,49*mm,f"ORIENTAMENTO: {orient}  •  INCLINAZIONE: {decimal(angle)}°")
+    c.drawRightString(PAGE_W-18*mm,43.8*mm,f"ORIENTAMENTO: {orient}  •  INCLINAZIONE: {decimal(angle)}°")
     draw_footer(c,2); c.showPage()
 
     # -----------------------------------------------------
@@ -999,25 +1001,25 @@ def generate_pdf():
     kpi(c,78*mm,PAGE_H-86*mm,55*mm,29*mm,"Rientro stimato",payback,YELLOW,"T")
     kpi(c,138*mm,PAGE_H-86*mm,53*mm,29*mm,"Beneficio 25 anni",euro(values["gross_25"]),GREEN,"€")
 
-    round_box(c,18*mm,116*mm,PAGE_W-36*mm,31*mm,WHITE,MID_GREY,8)
+    round_box(c,18*mm,158*mm,PAGE_W-36*mm,30*mm,WHITE,MID_GREY,8)
     c.setFillColor(DARK); c.setFont("Helvetica-Bold",9.7)
-    c.drawString(27*mm,137*mm,"Composizione dell'investimento")
-    stat_line(c,27*mm,126*mm,"Costo complessivo",euro(cost))
-    stat_line(c,105*mm,126*mm,"Detrazione totale",euro(deduction),GREEN)
-    c.setFillColor(LIGHT_GREEN); c.roundRect(27*mm,118*mm,158*mm,4*mm,2,fill=1,stroke=0)
+    c.drawString(27*mm,178*mm,"Composizione dell'investimento")
+    stat_line(c,27*mm,168*mm,"Costo complessivo",euro(cost))
+    stat_line(c,105*mm,168*mm,"Detrazione totale",euro(deduction),GREEN)
+    c.setFillColor(LIGHT_GREEN); c.roundRect(27*mm,160*mm,158*mm,4*mm,2,fill=1,stroke=0)
     if cost>0:
         dw=min(158*mm,158*mm*deduction/cost)
-        c.setFillColor(GREEN); c.roundRect(27*mm,118*mm,dw,4*mm,2,fill=1,stroke=0)
+        c.setFillColor(GREEN); c.roundRect(27*mm,160*mm,dw,4*mm,2,fill=1,stroke=0)
 
     # Punto di pareggio espresso chiaramente anche fuori dal grafico.
     if values.get("payback_years") is not None:
         c.setFillColor(LIGHT_YELLOW)
-        c.roundRect(27*mm,104*mm,158*mm,8*mm,4*mm,fill=1,stroke=0)
+        c.roundRect(27*mm,148*mm,158*mm,8*mm,4*mm,fill=1,stroke=0)
         c.setFillColor(DARK_GREEN)
         c.setFont("Helvetica-Bold",7.8)
-        c.drawCentredString(106*mm,106.7*mm,"PUNTO DI PAREGGIO: " + payback)
+        c.drawCentredString(106*mm,150.7*mm,"PUNTO DI PAREGGIO: " + payback)
 
-    economic_chart(c,18*mm,31*mm,PAGE_W-36*mm,69*mm,values["years"],
+    economic_chart(c,18*mm,42*mm,PAGE_W-36*mm,97*mm,values["years"],
                    values["net_cost"], values.get("payback_years"))
     draw_footer(c,4); c.showPage()
 
@@ -1135,19 +1137,19 @@ def generate_pdf():
         ("WEB","www.energiagiusta.it","web")
     ]
 
-    yy=109*mm
+    yy=108*mm
     for idx,(label,line,icon_kind) in enumerate(contact_lines):
         c.setFillColor(LIGHT_YELLOW if idx == 0 else LIGHT_GREEN)
         c.circle(31*mm,yy+1*mm,5.0*mm,fill=1,stroke=0)
         draw_contact_icon(c,31*mm,yy+1*mm,icon_kind)
 
-        c.setFillColor(GREY); c.setFont("Helvetica-BoldOblique",6.8)
+        c.setFillColor(GREY); c.setFont("Helvetica-BoldOblique",6.2)
         c.drawString(40*mm,yy+2*mm,label)
 
         c.setFillColor(DARK)
-        c.setFont("Helvetica-Bold",9.2 if idx != 1 else 8.6)
-        c.drawString(61*mm,yy+2*mm,line)
-        yy-=11*mm
+        c.setFont("Helvetica-Bold",8.8 if idx != 1 else 8.2)
+        c.drawString(70*mm,yy+2*mm,line)
+        yy-=10.5*mm
 
     # Fascia aziendale discreta
     c.setFillColor(PALE_GREEN); c.roundRect(40*mm,77*mm,119*mm,7*mm,3.5*mm,fill=1,stroke=0)
@@ -1159,11 +1161,12 @@ def generate_pdf():
 
     c.setFillColor(WHITE)
     draw_wrapped_text(c,
-        "Stima commerciale. Il risultato dipende da tariffe, profilo reale dei consumi, "
+        "Produzione stimata tramite PVGIS 5.3, strumento ufficiale della Commissione Europea – JRC. "
+        "I risultati sono stime e non costituiscono una garanzia di produzione effettiva. "
+        "Stima commerciale: il risultato dipende anche da tariffe, profilo reale dei consumi, "
         "condizioni di scambio/ritiro, ombreggiamento e altri fattori. "
-        "L'ipotesi del 12% di prelievo dalla rete è una stima prudenziale. "
-        "Non è un preventivo finanziario.",
-        18*mm,20*mm,PAGE_W-36*mm,"Helvetica",7.1,9.0,WHITE,5)
+        "L'ipotesi del 12% di prelievo dalla rete è una stima prudenziale. Non è un preventivo finanziario.",
+        18*mm,21*mm,PAGE_W-36*mm,"Helvetica",6.6,8.2,WHITE,5)
 
     c.save()
     buf.seek(0)
