@@ -398,10 +398,10 @@ def draw_header(c, title, subtitle=""):
     c.setFillColor(GREEN)
     c.rect(0, PAGE_H-22*mm, PAGE_W, 22*mm, fill=1, stroke=0)
     c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", 18.5)
+    c.setFont("Helvetica-Bold", 19.5)
     c.drawString(18*mm, PAGE_H-13.5*mm, title)
     if subtitle:
-        c.setFont("Helvetica", 8.7)
+        c.setFont("Helvetica", 9.0)
         c.drawRightString(PAGE_W-18*mm, PAGE_H-13.5*mm, subtitle)
 
 def draw_footer(c, page):
@@ -415,27 +415,27 @@ def draw_footer(c, page):
 
 def section_title(c, title, subtitle, y):
     c.setFillColor(DARK)
-    c.setFont("Helvetica-Bold", 21)
+    c.setFont("Helvetica-Bold", 22)
     c.drawString(18*mm, y, title)
     if subtitle:
         draw_wrapped_text(c, subtitle, 18*mm, y-8*mm,
-                           PAGE_W-36*mm, "Helvetica", 9.0, 11, GREY, 2)
+                           PAGE_W-36*mm, "Helvetica", 9.5, 11.5, GREY, 2)
 
 def kpi(c, x, y, w, h, label, value, accent=GREEN, icon=None):
     round_box(c, x, y, w, h, WHITE, MID_GREY, 7)
     c.setFillColor(accent)
     c.roundRect(x, y+h-10*mm, w, 10*mm, 7, fill=1, stroke=0)
     c.setFillColor(WHITE)
-    c.setFont("Helvetica-Bold", 7.5)
+    c.setFont("Helvetica-Bold", 8.0)
     if icon:
         c.drawString(x+5*mm, y+h-6.6*mm, icon)
         c.drawString(x+14*mm, y+h-6.6*mm, label.upper())
     else:
         c.drawString(x+5*mm, y+h-6.6*mm, label.upper())
 
-    fs = 17
+    fs = 18
     if stringWidth(value, "Helvetica-Bold", fs) > w-10*mm:
-        fs = 14
+        fs = 15
     if stringWidth(value, "Helvetica-Bold", fs) > w-10*mm:
         fs = 11.5
     c.setFillColor(DARK)
@@ -856,41 +856,42 @@ def generate_pdf():
 
     donut(c,67*mm,PAGE_H-95*mm,32*mm,values["self_used"],values["export"])
 
-    c.setFillColor(LIGHT_GREEN); c.roundRect(112*mm,PAGE_H-116*mm,76*mm,16*mm,5*mm,fill=1,stroke=0)
-    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",8.3)
-    c.drawString(119*mm,PAGE_H-107.5*mm,"PRODUZIONE")
-    c.setFillColor(GREY); c.setFont("Helvetica",6.8)
-    c.drawString(119*mm,PAGE_H-112.5*mm,f"{number(production)} kWh/anno")
-    c.setFillColor(YELLOW); c.circle(171*mm,PAGE_H-108*mm,2.5*mm,fill=1,stroke=0)
-    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",8)
-    c.drawCentredString(171*mm,PAGE_H-109.7*mm,"→")
+    # Riepilogo laterale, separato per evitare sovrapposizioni
+    c.setFillColor(LIGHT_GREEN); c.roundRect(112*mm,184*mm,76*mm,15*mm,5*mm,fill=1,stroke=0)
+    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",8.6)
+    c.drawString(119*mm,193*mm,"PRODUZIONE FV")
+    c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.2)
+    c.drawString(119*mm,187.5*mm,f"{number(production)} kWh/anno")
+    c.setFillColor(YELLOW); c.circle(177*mm,191*mm,2.3*mm,fill=1,stroke=0)
+    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",7.5)
+    c.drawCentredString(177*mm,189.2*mm,"→")
 
-    c.setFillColor(GREEN); c.rect(111*mm,PAGE_H-84*mm,6*mm,6*mm,fill=1,stroke=0)
-    c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.7); c.drawString(122*mm,PAGE_H-82.5*mm,"Autoconsumo FV")
-    c.setFillColor(GREY); c.setFont("Helvetica",7.6); c.drawString(122*mm,PAGE_H-91*mm,f"{number(values['self_used'])} kWh/anno")
+    c.setFillColor(GREEN); c.rect(112*mm,165*mm,6*mm,6*mm,fill=1,stroke=0)
+    c.setFillColor(DARK); c.setFont("Helvetica-Bold",9.0); c.drawString(122*mm,168*mm,"Autoconsumo FV")
+    c.setFillColor(GREY); c.setFont("Helvetica",7.8); c.drawString(122*mm,161.5*mm,f"{number(values['self_used'])} kWh/anno")
 
-    c.setFillColor(YELLOW); c.rect(111*mm,PAGE_H-104*mm,6*mm,6*mm,fill=1,stroke=0)
-    c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.7); c.drawString(122*mm,PAGE_H-102.5*mm,"Energia immessa")
-    c.setFillColor(GREY); c.setFont("Helvetica",7.6); c.drawString(122*mm,PAGE_H-111*mm,f"{number(values['export'])} kWh/anno")
+    c.setFillColor(YELLOW); c.rect(112*mm,145*mm,6*mm,6*mm,fill=1,stroke=0)
+    c.setFillColor(DARK); c.setFont("Helvetica-Bold",9.0); c.drawString(122*mm,148*mm,"Energia immessa")
+    c.setFillColor(GREY); c.setFont("Helvetica",7.8); c.drawString(122*mm,141.5*mm,f"{number(values['export'])} kWh/anno")
 
     # KPI più chiari
-    kpi(c,18*mm,98*mm,53*mm,28*mm,"Autoconsumo FV",f"{values['self_consumption_pct']:.0f}%",GREEN,"A")
-    kpi(c,78*mm,98*mm,53*mm,28*mm,"Energia immessa",f"{values['export']/max(production,1)*100:.0f}%",YELLOW,"I")
-    kpi(c,138*mm,98*mm,53*mm,28*mm,"Prelievo rete",f"{values['grid_purchase_pct']:.0f}%",GREEN,"R")
+    kpi(c,18*mm,104*mm,53*mm,28*mm,"Autoconsumo FV",f"{values['self_consumption_pct']:.0f}%",GREEN,"A")
+    kpi(c,78*mm,104*mm,53*mm,28*mm,"Energia immessa",f"{values['export']/max(production,1)*100:.0f}%",YELLOW,"I")
+    kpi(c,138*mm,104*mm,53*mm,28*mm,"Prelievo rete",f"{values['grid_purchase_pct']:.0f}%",GREEN,"R")
 
     # Box dedicato alla nuova ipotesi prudenziale
-    round_box(c,18*mm,61*mm,PAGE_W-36*mm,30*mm,LIGHT_GREEN,None,8)
-    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",9.8)
-    c.drawString(27*mm,78*mm,"Ipotesi prudenziale di simulazione")
-    c.setFillColor(DARK); c.setFont("Helvetica-Bold",8.5)
-    c.drawString(27*mm,70*mm,f"Prelievo dalla rete: {values['grid_purchase_pct']:.0f}% dei consumi")
-    c.setFillColor(GREY); c.setFont("Helvetica",7.6)
-    c.drawRightString(PAGE_W-27*mm,70*mm,f"≈ {number(values['grid_purchase'])} kWh/anno")
+    round_box(c,18*mm,58*mm,PAGE_W-36*mm,31*mm,LIGHT_GREEN,None,8)
+    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",10.2)
+    c.drawString(27*mm,80*mm,"Ipotesi prudenziale di simulazione")
+    c.setFillColor(DARK); c.setFont("Helvetica-Bold",9.0)
+    c.drawString(27*mm,72*mm,f"Prelievo dalla rete: {values['grid_purchase_pct']:.0f}% dei consumi")
+    c.setFillColor(GREY); c.setFont("Helvetica",7.9)
+    c.drawRightString(PAGE_W-27*mm,72*mm,f"≈ {number(values['grid_purchase'])} kWh/anno")
     draw_wrapped_text(c,
         "Il modello considera prudenzialmente una quota del 12% dei consumi acquistata dalla rete. "
         "Se la produzione non è sufficiente, il prelievo viene aumentato automaticamente per mantenere "
         "la coerenza del bilancio energetico.",
-        27*mm,65*mm,PAGE_W-54*mm,"Helvetica",7.2,8.5,GREY,2)
+        27*mm,67*mm,PAGE_W-54*mm,"Helvetica",7.6,9.0,GREY,2)
 
     draw_footer(c,3); c.showPage()
 
@@ -1013,49 +1014,48 @@ def generate_pdf():
     c.setFont("Helvetica",9)
     c.drawString(18*mm,PAGE_H-76*mm,"Parliamone insieme e costruiamo la soluzione più adatta.")
 
-    # Pannello contatti più alto e dinamico
+    # Pannello contatti riorganizzato
     round_box(c,18*mm,68*mm,PAGE_W-36*mm,86*mm,WHITE,None,10)
 
-    c.setFillColor(DARK); c.setFont("Helvetica-Bold",21)
+    # Nome in corsivo, più personale e distintivo
+    c.setFillColor(DARK); c.setFont("Helvetica-BoldOblique",23)
     c.drawString(29*mm,138*mm,"Simone Alfarano")
-    c.setFillColor(GREEN); c.setFont("Helvetica-BoldOblique",9.5)
-    c.drawString(29*mm,128*mm,"RESPONSABILE COMMERCIALE")
-    c.setFillColor(GREY); c.setFont("Helvetica-Oblique",7.2)
+    c.setFillColor(GREEN); c.setFont("Helvetica-BoldOblique",9.8)
+    c.drawString(29*mm,128.5*mm,"RESPONSABILE COMMERCIALE")
+    c.setFillColor(GREY); c.setFont("Helvetica-Oblique",7.4)
     c.drawString(29*mm,122.5*mm,"Energia Giusta  •  Partner ENI Plenitude")
 
     c.setFillColor(MID_GREY); c.setLineWidth(.5)
     c.line(29*mm,118*mm,PAGE_W-29*mm,118*mm)
 
+    # Contatti essenziali, più leggibili e senza affollamento
     contact_lines=[
-        ("AZIENDA","Energia Giusta","company"),
-        ("PARTNER","ENI Plenitude","partner"),
         ("TELEFONO","351.7478652","phone"),
         ("EMAIL","simone.alfarano@energiagiusta.it","mail"),
         ("WEB","www.energiagiusta.it","web")
     ]
 
-    yy=110*mm
+    yy=109*mm
     for idx,(label,line,icon_kind) in enumerate(contact_lines):
-        c.setFillColor(LIGHT_GREEN if idx < 2 else LIGHT_YELLOW)
-        c.circle(31*mm,yy+1*mm,5.2*mm,fill=1,stroke=0)
+        c.setFillColor(LIGHT_YELLOW if idx == 0 else LIGHT_GREEN)
+        c.circle(31*mm,yy+1*mm,5.0*mm,fill=1,stroke=0)
         draw_contact_icon(c,31*mm,yy+1*mm,icon_kind)
 
-        c.setFillColor(GREY); c.setFont("Helvetica-BoldOblique",6.3)
+        c.setFillColor(GREY); c.setFont("Helvetica-BoldOblique",6.8)
         c.drawString(40*mm,yy+2*mm,label)
 
         c.setFillColor(DARK)
-        if idx in (2,3,4):
-            c.setFont("Helvetica-Bold",8.7)
-        else:
-            c.setFont("Helvetica-Bold",8.5)
-
-        # L'email ha più spazio a disposizione
-        if idx == 3:
-            c.setFont("Helvetica-Bold",8.0)
+        c.setFont("Helvetica-Bold",9.2 if idx != 1 else 8.6)
         c.drawString(61*mm,yy+2*mm,line)
-        yy-=9*mm
+        yy-=11*mm
 
-    pill(c,29*mm,51*mm,75*mm,14*mm,"CONTATTAMI PER INFO",YELLOW,DARK,9.3)
+    # Fascia aziendale discreta
+    c.setFillColor(PALE_GREEN); c.roundRect(40*mm,77*mm,119*mm,7*mm,3.5*mm,fill=1,stroke=0)
+    c.setFillColor(DARK_GREEN); c.setFont("Helvetica-Bold",7.0)
+    c.drawCentredString(99.5*mm,79.4*mm,"ENERGIA GIUSTA   •   PARTNER ENI PLENITUDE")
+
+    # CTA più evidente
+    pill(c,29*mm,51*mm,75*mm,14*mm,"CONTATTAMI PER INFO",YELLOW,DARK,9.6)
 
     c.setFillColor(WHITE)
     draw_wrapped_text(c,
@@ -1063,7 +1063,7 @@ def generate_pdf():
         "condizioni di scambio/ritiro, ombreggiamento e altri fattori. "
         "L'ipotesi del 12% di prelievo dalla rete è una stima prudenziale. "
         "Non è un preventivo finanziario.",
-        18*mm,20*mm,PAGE_W-36*mm,"Helvetica",6.9,8.8,WHITE,5)
+        18*mm,20*mm,PAGE_W-36*mm,"Helvetica",7.1,9.0,WHITE,5)
 
     c.save()
     buf.seek(0)
