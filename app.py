@@ -94,6 +94,7 @@ def calculate_values(d):
     years = []
     cumulative_benefit = 0
     payback = None
+    payback_years = None
 
     for y in range(1, 26):
         production_y = production * ((1 - degradation) ** (y - 1))
@@ -111,6 +112,10 @@ def calculate_values(d):
 
         if payback is None and cumulative_benefit >= net_cost:
             payback = y
+            previous_cumulative = cumulative_benefit - benefit
+            fraction = (net_cost - previous_cumulative) / benefit if benefit > 0 else 0
+            fraction = max(0, min(1, fraction))
+            payback_years = (y - 1) + fraction
 
         years.append({
             "year": y,
@@ -135,6 +140,7 @@ def calculate_values(d):
         "annual_saving": annual_saving,
         "net_cost": net_cost,
         "payback": payback,
+        "payback_years": payback_years,
         "years": years,
         "gross_25": gross_25,
         "net_25": net_25
@@ -549,32 +555,100 @@ def donut(c, cx, cy, r, self_used, export):
     c.setFont("Helvetica",6.8)
     c.drawCentredString(cx,cy-8,"autoconsumo FV")
 
-def economic_chart(c, x, y, w, h, years):
+def economic_chart(c, x, y, w, h, years, net_cost=0, payback_years=None):
     round_box(c,x,y,w,h,WHITE,MID_GREY,8)
     c.setFillColor(DARK)
     c.setFont("Helvetica-Bold",10.5)
-    c.drawString(x+8*mm,y+h-11*mm,"Beneficio cumulato nel tempo")
+    c.drawString(x+8*mm,y+h-10*mm,"Beneficio cumulato e punto di pareggio")
+
+    # Etichetta esplicita del rientro, sempre visibile nel grafico.
+    if payback_years is not None and net_cost > 0:
+        total_months = round(payback_years * 12)
+        pb_year = total_months // 12
+        pb_month = total_months % 12
+        if pb_year > 0 and pb_month > 0:
+            pb_label = f"{pb_year} anni e {pb_month} mesi"
+        elif pb_year > 0:
+            pb_label = f"{pb_year} anni"
+        else:
+            pb_label = f"{pb_month} mesi"
+
+        c.setFillColor(LIGHT_YELLOW)
+        c.roundRect(x+w-72*mm, y+h-18*mm, 64*mm, 8*mm, 4*mm, fill=1, stroke=0)
+        c.setFillColor(DARK_GREEN)
+        c.setFont("Helvetica-Bold",7.0)
+        c.drawCentredString(x+w-40*mm, y+h-15.1*mm, "PAREGGIO: " + pb_label)
+
     vals=[z["cumulative"] for z in years]
-    mx=max(max(vals or [1]),1)
+    mx=max(max(vals or [1]), net_cost, 1)
     left,bottom=x+13*mm,y+15*mm
     cw,ch=w-20*mm,h-31*mm
     c.setStrokeColor(MID_GREY); c.setLineWidth(.35)
     for i in range(4):
         gy=bottom+ch*i/3
         c.line(left,gy,left+cw,gy)
+
     pts=[]
     for i,val in enumerate(vals):
         px=left+cw*i/24
         py=bottom+ch*val/mx
         pts.append((px,py))
+
+    # Curva del beneficio cumulato
     c.setStrokeColor(GREEN); c.setLineWidth(2.2)
     for p1,p2 in zip(pts,pts[1:]):
         c.line(p1[0],p1[1],p2[0],p2[1])
+
+    # Linea orizzontale dell'investimento netto: qui avviene il pareggio.
+    if net_cost > 0:
+        break_y = bottom + ch * min(net_cost, mx) / mx
+        c.saveState()
+        c.setStrokeColor(YELLOW)
+        c.setLineWidth(1.5)
+        c.setDash(5, 3)
+        c.line(left, break_y, left+cw, break_y)
+        c.restoreState()
+
+        # Etichetta molto più evidente della soglia di pareggio.
+        c.setFillColor(YELLOW)
+        c.roundRect(left+2*mm, break_y-2.5*mm, 39*mm, 6*mm, 3*mm, fill=1, stroke=0)
+        c.setFillColor(DARK)
+        c.setFont("Helvetica-Bold",6.1)
+        c.drawCentredString(left+21.5*mm, break_y-0.2*mm, "INVESTIMENTO NETTO  " + euro(net_cost))
+
+    # Punto esatto di pareggio sulla curva.
+    if payback_years is not None and payback_years <= 25 and net_cost > 0:
+        px = left + cw * payback_years / 24.0
+        py = bottom + ch * net_cost / mx
+
+        c.saveState()
+        c.setStrokeColor(YELLOW)
+        c.setLineWidth(1.0)
+        c.setDash(2, 2)
+        c.line(px, bottom, px, py)
+        c.restoreState()
+
+        c.setFillColor(YELLOW)
+        c.circle(px, py, 3.5, fill=1, stroke=0)
+        c.setFillColor(DARK_GREEN)
+        c.circle(px, py, 1.7, fill=1, stroke=0)
+
+        # Freccia/etichetta vicino al punto esatto.
+        label_x = min(px+5*mm, left+cw-39*mm)
+        label_y = min(py+4*mm, bottom+ch-8*mm)
+        c.setFillColor(DARK_GREEN)
+        c.setFont("Helvetica-Bold",6.4)
+        c.drawString(label_x, label_y, "Rientro: " + pb_label)
+
+    # Scala temporale.
     for i in [0,4,9,14,19,24]:
         px,py=pts[i]
         c.setFillColor(GREEN); c.circle(px,py,2.3,fill=1,stroke=0)
         c.setFillColor(GREY); c.setFont("Helvetica",5.9)
         c.drawCentredString(px,bottom-8,str(i+1))
+    c.setFillColor(GREY)
+    c.setFont("Helvetica",5.8)
+    c.drawString(left+cw-35*mm, bottom-8, "anni")
 
 def draw_contact_icon(c, cx, cy, kind):
     """Icone vettoriali semplici per la sezione contatti."""
@@ -584,13 +658,19 @@ def draw_contact_icon(c, cx, cy, kind):
     c.setLineWidth(1.15)
 
     if kind == "phone":
-        # cornetta
+        # Cornetta telefonica moderna, più leggibile anche in stampa.
+        c.setLineCap(1)
+        c.setLineJoin(1)
+        c.setLineWidth(2.3)
         p = c.beginPath()
-        p.moveTo(cx-3.8*mm, cy+3*mm)
-        p.curveTo(cx-5*mm, cy+1*mm, cx-4*mm, cy-3*mm, cx-1*mm, cy-5*mm)
-        p.curveTo(cx+1*mm, cy-6*mm, cx+4*mm, cy-4*mm, cx+4.8*mm, cy-2.5*mm)
-        c.line(cx+2.2*mm,cy-1.2*mm,cx+4.8*mm,cy-2.5*mm)
-        c.line(cx-3.8*mm,cy+3*mm,cx-2.4*mm,cy+5*mm)
+        p.moveTo(cx-4.2*mm, cy+3.8*mm)
+        p.curveTo(cx-5.8*mm, cy+1.0*mm, cx-3.7*mm, cy-3.0*mm, cx-0.5*mm, cy-4.4*mm)
+        p.curveTo(cx+2.2*mm, cy-5.5*mm, cx+4.6*mm, cy-3.8*mm, cx+5.0*mm, cy-1.5*mm)
+        c.drawPath(p, fill=0, stroke=1)
+        c.setLineWidth(3.0)
+        c.line(cx-4.2*mm, cy+3.8*mm, cx-1.8*mm, cy+1.9*mm)
+        c.line(cx+2.9*mm, cy-1.4*mm, cx+5.0*mm, cy-1.5*mm)
+        c.setLineCap(0)
     elif kind == "mail":
         c.roundRect(cx-5.5*mm,cy-3.8*mm,11*mm,7.6*mm,1.2*mm,fill=0,stroke=1)
         p=c.beginPath()
@@ -903,7 +983,18 @@ def generate_pdf():
                   "Una lettura immediata dell'investimento e del beneficio stimato.",
                   PAGE_H-38*mm)
 
-    payback=f"{values['payback']} anni" if values["payback"] is not None else "> 25 anni"
+    if values.get("payback_years") is not None:
+        total_months = round(values["payback_years"] * 12)
+        pb_year = total_months // 12
+        pb_month = total_months % 12
+        if pb_year > 0 and pb_month > 0:
+            payback = f"{pb_year} anni e {pb_month} mesi"
+        elif pb_year > 0:
+            payback = f"{pb_year} anni"
+        else:
+            payback = f"{pb_month} mesi"
+    else:
+        payback = "> 25 anni"
     kpi(c,18*mm,PAGE_H-86*mm,55*mm,29*mm,"Investimento netto",euro(values["net_cost"]),GREEN,"€")
     kpi(c,78*mm,PAGE_H-86*mm,55*mm,29*mm,"Rientro stimato",payback,YELLOW,"T")
     kpi(c,138*mm,PAGE_H-86*mm,53*mm,29*mm,"Beneficio 25 anni",euro(values["gross_25"]),GREEN,"€")
@@ -918,7 +1009,16 @@ def generate_pdf():
         dw=min(158*mm,158*mm*deduction/cost)
         c.setFillColor(GREEN); c.roundRect(27*mm,118*mm,dw,4*mm,2,fill=1,stroke=0)
 
-    economic_chart(c,18*mm,35*mm,PAGE_W-36*mm,77*mm,values["years"])
+    # Punto di pareggio espresso chiaramente anche fuori dal grafico.
+    if values.get("payback_years") is not None:
+        c.setFillColor(LIGHT_YELLOW)
+        c.roundRect(27*mm,104*mm,158*mm,8*mm,4*mm,fill=1,stroke=0)
+        c.setFillColor(DARK_GREEN)
+        c.setFont("Helvetica-Bold",7.8)
+        c.drawCentredString(106*mm,106.7*mm,"PUNTO DI PAREGGIO: " + payback)
+
+    economic_chart(c,18*mm,31*mm,PAGE_W-36*mm,69*mm,values["years"],
+                   values["net_cost"], values.get("payback_years"))
     draw_footer(c,4); c.showPage()
 
     # -----------------------------------------------------
@@ -1018,7 +1118,7 @@ def generate_pdf():
     round_box(c,18*mm,68*mm,PAGE_W-36*mm,86*mm,WHITE,None,10)
 
     # Nome in corsivo, più personale e distintivo
-    c.setFillColor(DARK); c.setFont("Helvetica-BoldOblique",23)
+    c.setFillColor(DARK); c.setFont("Helvetica-Oblique",24)
     c.drawString(29*mm,138*mm,"Simone Alfarano")
     c.setFillColor(GREEN); c.setFont("Helvetica-BoldOblique",9.8)
     c.drawString(29*mm,128.5*mm,"RESPONSABILE COMMERCIALE")
@@ -1030,7 +1130,7 @@ def generate_pdf():
 
     # Contatti essenziali, più leggibili e senza affollamento
     contact_lines=[
-        ("TELEFONO","351.7478652","phone"),
+        ("TELEFONO / WHATSAPP","351.7478652","phone"),
         ("EMAIL","simone.alfarano@energiagiusta.it","mail"),
         ("WEB","www.energiagiusta.it","web")
     ]
