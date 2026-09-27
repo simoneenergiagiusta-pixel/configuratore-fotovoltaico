@@ -14,7 +14,11 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 app = Flask(__name__)
 
 PVGIS_URL = "https://re.jrc.ec.europa.eu/api/v5_3/PVcalc"
+GEOCODING_URL = "https://nominatim.openstreetmap.org/search"
 PAGE_W, PAGE_H = A4
+
+# Cache locale per evitare richieste ripetute allo stesso indirizzo.
+GEOCODE_CACHE = {}
 
 # Ipotesi prudenziale: quota minima dei consumi acquistata dalla rete.
 # Se la produzione non consente di rispettare il 12%, il prelievo reale
@@ -31,16 +35,74 @@ def pvgis(params):
     with urlopen(req, timeout=20) as r:
         return json.loads(r.read().decode("utf-8"))
 
+def geocode_address(address):
+    """Converte automaticamente un indirizzo italiano in latitudine/longitudine."""
+    address = " ".join(str(address or "").strip().split())
+    if not address:
+        raise ValueError("Inserisci un indirizzo completo.")
+
+    cache_key = address.lower()
+    if cache_key in GEOCODE_CACHE:
+        return GEOCODE_CACHE[cache_key]
+
+    params = {
+        "q": address,
+        "format": "jsonv2",
+        "limit": 1,
+        "countrycodes": "it",
+        "addressdetails": 1,
+        "accept-language": "it",
+    }
+    url = GEOCODING_URL + "?" + urlencode(params)
+    req = Request(
+        url,
+        headers={
+            "User-Agent": "ConfiguratoreFotovoltaico/1.0 (Energia Giusta)"
+        }
+    )
+    with urlopen(req, timeout=10) as r:
+        data = json.loads(r.read().decode("utf-8"))
+
+    if not data:
+        raise ValueError("Indirizzo non trovato. Inserisci via, numero civico e comune.")
+
+    result = {
+        "lat": float(data[0]["lat"]),
+        "lon": float(data[0]["lon"]),
+        "display_name": data[0].get("display_name", address),
+    }
+    GEOCODE_CACHE[cache_key] = result
+    return result
+
+def resolve_coordinates(d):
+    """Usa le coordinate già presenti oppure le ricava dall'indirizzo."""
+    if d.get("lat") is not None and d.get("lon") is not None:
+        return {"lat": float(d["lat"]), "lon": float(d["lon"])}
+    return geocode_address(d.get("address", ""))
+
 @app.get("/")
 def index():
     return render_template("index.html")
 
+@app.post("/api/geocode")
+def api_geocode():
+    d = request.get_json(force=True)
+    try:
+        result = geocode_address(d.get("address", ""))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @app.post("/api/pvgis")
 def api_pvgis():
     d = request.get_json(force=True)
+    try:
+        coords = resolve_coordinates(d)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
     params = {
-        "lat": float(d["lat"]),
-        "lon": float(d["lon"]),
+        "lat": coords["lat"],
+        "lon": coords["lon"],
         "peakpower": float(d["kwp"]),
         "loss": float(d.get("loss", 14)),
         "angle": float(d.get("angle", 30)),
@@ -156,10 +218,11 @@ def calculate():
         result["monthly_kwh"] = monthly
     else:
         try:
-            if d.get("lat") is not None and d.get("lon") is not None and float(d.get("kwp", 0)) > 0:
+            if float(d.get("kwp", 0)) > 0:
+                coords = resolve_coordinates(d)
                 params = {
-                    "lat": float(d["lat"]),
-                    "lon": float(d["lon"]),
+                    "lat": coords["lat"],
+                    "lon": coords["lon"],
                     "peakpower": float(d["kwp"]),
                     "loss": float(d.get("loss", 14)),
                     "angle": float(d.get("angle", 30)),
@@ -828,10 +891,11 @@ def generate_pdf():
     if not isinstance(monthly, list) or len(monthly) != 12:
         monthly = None
         try:
-            if d.get("lat") is not None and d.get("lon") is not None and kwp > 0:
+            if kwp > 0:
+                coords = resolve_coordinates(d)
                 pv_params = {
-                    "lat": float(d["lat"]),
-                    "lon": float(d["lon"]),
+                    "lat": coords["lat"],
+                    "lon": coords["lon"],
                     "peakpower": kwp,
                     "loss": loss,
                     "angle": angle,
@@ -922,10 +986,10 @@ def generate_pdf():
     c.setFillColor(GREY); c.setFont("Helvetica",7.0)
     c.drawString(18*mm,48.5*mm,"Produzione stimata tramite PVGIS 5.3, strumento ufficiale della Commissione Europea – Joint Research Centre (JRC).")
     c.setFont("Helvetica-Oblique",6.7)
-    c.drawString(18*mm,43.8*mm,"La produzione effettiva può variare in funzione di condizioni meteo, ombreggiamenti, temperatura, disponibilità dell'impianto e altre condizioni reali.")
+    c.drawString(18*mm,43.8*mm,"La produzione reale può variare per condizioni meteo, ombreggiamenti e altre condizioni operative.")
     c.setFillColor(GREEN); c.setFont("Helvetica-Bold",7.0)
     orient = {-90:"EST",0:"SUD",90:"OVEST"}.get(int(aspect),"")
-    c.drawRightString(PAGE_W-18*mm,43.8*mm,f"ORIENTAMENTO: {orient}  •  INCLINAZIONE: {decimal(angle)}°")
+    c.drawCentredString(PAGE_W/2,38.8*mm,f"ORIENTAMENTO: {orient}  •  INCLINAZIONE: {decimal(angle)}°")
     draw_footer(c,2); c.showPage()
 
     # -----------------------------------------------------
@@ -973,7 +1037,7 @@ def generate_pdf():
         "Il modello considera prudenzialmente una quota del 12% dei consumi acquistata dalla rete. "
         "Se la produzione non è sufficiente, il prelievo viene aumentato automaticamente per mantenere "
         "la coerenza del bilancio energetico.",
-        27*mm,67*mm,PAGE_W-54*mm,"Helvetica",7.6,9.0,GREY,2)
+        27*mm,67*mm,PAGE_W-54*mm,"Helvetica",7.8,9.4,GREY,2)
 
     draw_footer(c,3); c.showPage()
 
