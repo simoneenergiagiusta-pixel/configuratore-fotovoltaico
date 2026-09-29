@@ -4172,6 +4172,5 @@ def generate_pdf():
         f"ORIENTAMENTO: {orient}  •  INCLINAZIONE: {decimal(angle)}°"
     )
 
-    draw_footer(
-        c,
+draw_footer(c, 7)        c,
         2
