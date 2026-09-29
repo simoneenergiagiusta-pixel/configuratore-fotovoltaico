@@ -76,11 +76,7 @@
       </label>
 
 
-      <!--
-        Le coordinate NON vengono più mostrate.
-        Rimangono presenti nel form perché servono
-        al funzionamento di PVGIS e del PDF.
-      -->
+      <!-- COORDINATE NASCOSTE -->
 
       <input
         id="lat"
@@ -126,24 +122,86 @@
       </label>
 
 
+      <!-- =================================================
+           ORIENTAMENTO
+      ================================================== -->
+
       <label>
-        Orientamento / azimuth
+
+        Orientamento pannelli
 
         <select id="aspect">
 
+          <option value="-180">
+            Nord (±180°)
+          </option>
+
+          <option value="-135">
+            Nord-Est (-135°)
+          </option>
+
           <option value="-90">
             Est (-90°)
+          </option>
+
+          <option value="-45">
+            Sud-Est (-45°)
           </option>
 
           <option value="0" selected>
             Sud (0°)
           </option>
 
+          <option value="45">
+            Sud-Ovest (+45°)
+          </option>
+
           <option value="90">
-            Ovest (90°)
+            Ovest (+90°)
+          </option>
+
+          <option value="135">
+            Nord-Ovest (+135°)
+          </option>
+
+          <option value="custom">
+            Personalizzato
           </option>
 
         </select>
+
+      </label>
+
+
+      <!-- AZIMUT PERSONALIZZATO -->
+
+      <label
+        id="customAspectContainer"
+        style="display:none;"
+      >
+
+        Azimut personalizzato (°)
+
+        <input
+          id="customAspect"
+          type="number"
+          min="-180"
+          max="180"
+          step="1"
+          value="0"
+          placeholder="Es. -30"
+        >
+
+        <small
+          style="
+            display:block;
+            margin-top:4px;
+            opacity:.7;
+          "
+        >
+          Da -180° a +180°.
+          0° = Sud.
+        </small>
 
       </label>
 
@@ -322,6 +380,112 @@ const v = id =>
 
 
 /* =========================================================
+   GESTIONE ORIENTAMENTO
+========================================================= */
+
+function getAspectValue(){
+
+  const selected =
+    v("aspect");
+
+  if(selected === "custom"){
+
+    let custom =
+      Number(v("customAspect"));
+
+    if(!Number.isFinite(custom)){
+      custom = 0;
+    }
+
+    /*
+      Manteniamo l'azimut sempre
+      nell'intervallo -180 / +180.
+    */
+
+    custom =
+      Math.max(
+        -180,
+        Math.min(
+          180,
+          custom
+        )
+      );
+
+    return custom;
+
+  }
+
+  return Number(selected);
+
+}
+
+
+function getAspectLabel(){
+
+  const selected =
+    v("aspect");
+
+
+  if(selected === "custom"){
+
+    const azimuth =
+      getAspectValue();
+
+    return "Personalizzato (" +
+      (azimuth > 0 ? "+" : "") +
+      azimuth +
+      "°)";
+
+  }
+
+
+  const option =
+    document.querySelector(
+      '#aspect option[value="' +
+      selected +
+      '"]'
+    );
+
+
+  return option
+    ? option.textContent.trim()
+    : selected + "°";
+
+}
+
+
+function updateCustomAspect(){
+
+  const container =
+    document.getElementById(
+      "customAspectContainer"
+    );
+
+
+  if(v("aspect") === "custom"){
+
+    container.style.display =
+      "block";
+
+  }else{
+
+    container.style.display =
+      "none";
+
+  }
+
+}
+
+
+document
+  .getElementById("aspect")
+  .addEventListener(
+    "change",
+    updateCustomAspect
+  );
+
+
+/* =========================================================
    GEOCODIFICA INDIRIZZO
 ========================================================= */
 
@@ -399,11 +563,6 @@ async function geocodeAddress(){
     }
 
 
-    /*
-      Salviamo le coordinate
-      senza mostrarle all'utente.
-    */
-
     document.getElementById("lat").value =
       d.lat;
 
@@ -413,11 +572,6 @@ async function geocodeAddress(){
 
     addressFound = true;
 
-
-    /*
-      Mostriamo invece l'indirizzo
-      trovato dal sistema.
-    */
 
     result.innerHTML =
 
@@ -501,10 +655,6 @@ async function getPVGIS(){
     document.getElementById("pvgisResult");
 
 
-  /*
-    Controllo indirizzo.
-  */
-
   if(!v("address").trim()){
 
     result.innerHTML =
@@ -514,10 +664,6 @@ async function getPVGIS(){
 
   }
 
-
-  /*
-    Controllo coordinate.
-  */
 
   if(
     !v("lat") ||
@@ -535,6 +681,10 @@ async function getPVGIS(){
     return;
 
   }
+
+
+  const aspect =
+    getAspectValue();
 
 
   result.innerHTML =
@@ -560,7 +710,8 @@ async function getPVGIS(){
           kwp:v("kwp"),
 
           angle:v("angle"),
-          aspect:v("aspect"),
+
+          aspect:aspect,
 
           loss:v("loss")
 
@@ -617,6 +768,17 @@ async function getPVGIS(){
         Produzione stimata da PVGIS 5.3,
         con posizione, potenza, inclinazione,
         orientamento e perdite impostate.
+
+      </p>
+
+
+      <p style="
+        margin-top:10px;
+        font-weight:bold;
+      ">
+
+        🧭 Orientamento:
+        ${getAspectLabel()}
 
       </p>
 
@@ -1123,7 +1285,8 @@ async function generatePDF(event){
               v("angle"),
 
             aspect:
-              v("aspect"),
+              getAspectValue(),
+
 
             loss:
               v("loss"),
