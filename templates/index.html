@@ -27,33 +27,71 @@
 
     <div class="grid">
 
-      <label>
-        Indirizzo
-        <input
-          id="address"
-          placeholder="Via, civico, CAP, Comune"
-        >
+      <!-- INDIRIZZO -->
+
+      <label style="grid-column:1 / -1;">
+
+        📍 Indirizzo dell'immobile
+
+        <div style="
+          display:flex;
+          gap:10px;
+          margin-top:6px;
+          flex-wrap:wrap;
+        ">
+
+          <input
+            id="address"
+            placeholder="Via, civico, CAP, Comune"
+            autocomplete="street-address"
+            style="
+              flex:1;
+              min-width:220px;
+            "
+          >
+
+          <button
+            type="button"
+            onclick="geocodeAddress()"
+            style="
+              white-space:nowrap;
+              padding:10px 16px;
+              font-weight:bold;
+              cursor:pointer;
+            "
+          >
+            📍 TROVA INDIRIZZO
+          </button>
+
+        </div>
+
+        <div
+          id="addressResult"
+          style="
+            margin-top:8px;
+            font-size:14px;
+          "
+        ></div>
+
       </label>
 
-      <label>
-        Latitudine
-        <input
-          id="lat"
-          type="number"
-          step="0.000001"
-          placeholder="es. 41.90"
-        >
-      </label>
 
-      <label>
-        Longitudine
-        <input
-          id="lon"
-          type="number"
-          step="0.000001"
-          placeholder="es. 12.50"
-        >
-      </label>
+      <!--
+        Le coordinate NON vengono più mostrate.
+        Rimangono presenti nel form perché servono
+        al funzionamento di PVGIS e del PDF.
+      -->
+
+      <input
+        id="lat"
+        type="hidden"
+      >
+
+      <input
+        id="lon"
+        type="hidden"
+      >
+
 
       <label>
         Potenza FV (kWp)
@@ -65,6 +103,7 @@
         >
       </label>
 
+
       <label>
         Batteria (kWh)
         <input
@@ -75,6 +114,7 @@
         >
       </label>
 
+
       <label>
         Inclinazione (°)
         <input
@@ -84,6 +124,7 @@
           value="30"
         >
       </label>
+
 
       <label>
         Orientamento / azimuth
@@ -106,25 +147,32 @@
 
       </label>
 
+
       <label>
         Perdite sistema (%)
+
         <input
           id="loss"
           type="number"
           step="0.1"
           value="14"
         >
+
       </label>
+
 
       <label>
         Consumo annuo (kWh)
+
         <input
           id="consumption"
           type="number"
           step="1"
           value="6500"
         >
+
       </label>
+
 
       <label>
         Profilo consumi
@@ -147,58 +195,74 @@
 
       </label>
 
+
       <label>
         Costo impianto (€)
+
         <input
           id="cost"
           type="number"
           step="1"
           value="10990"
         >
+
       </label>
+
 
       <label>
         Detrazione totale (€)
+
         <input
           id="deduction"
           type="number"
           step="1"
           value="5495"
         >
+
       </label>
+
 
       <label>
         Prezzo energia acquistata (€/kWh)
+
         <input
           id="energy_price"
           type="number"
           step="0.01"
           value="0.25"
         >
+
       </label>
+
 
       <label>
         Valore energia immessa (€/kWh)
+
         <input
           id="export_price"
           type="number"
           step="0.01"
           value="0.10"
         >
+
       </label>
 
     </div>
 
 
-    <p class="note">
+    <p class="note" id="locationNote">
 
-      Per la geolocalizzazione, inserisci latitudine e longitudine.
-      L'indirizzo resta disponibile nel report cliente.
+      📍 Inserisci l'indirizzo dell'immobile e clicca
+      <b>"Trova indirizzo"</b>.
+      Le coordinate verranno individuate automaticamente.
 
     </p>
 
 
-    <button onclick="getPVGIS()">
+    <button
+      type="button"
+      onclick="getPVGIS()"
+    >
       🔎 CALCOLA PRODUZIONE CON PVGIS
     </button>
 
@@ -215,7 +279,7 @@
 
     <div id="pvgisResult" class="result">
 
-      Inserisci le coordinate e avvia il calcolo.
+      Inserisci l'indirizzo e avvia il calcolo.
 
     </div>
 
@@ -230,7 +294,10 @@
 
     <h2>3. Ritorno dell'investimento</h2>
 
-    <button onclick="calculate()">
+    <button
+      type="button"
+      onclick="calculate()"
+    >
       📊 CALCOLA RITORNO DELL'INVESTIMENTO
     </button>
 
@@ -247,9 +314,181 @@ let annualProduction = 0;
 
 let monthlyProduction = [];
 
+let addressFound = false;
+
 
 const v = id =>
   document.getElementById(id).value;
+
+
+/* =========================================================
+   GEOCODIFICA INDIRIZZO
+========================================================= */
+
+async function geocodeAddress(){
+
+  const address =
+    v("address").trim();
+
+  const result =
+    document.getElementById("addressResult");
+
+  const button =
+    event.currentTarget;
+
+
+  if(!address){
+
+    result.innerHTML =
+      "<span style='color:#b00020;font-weight:bold'>" +
+      "⚠️ Inserisci prima un indirizzo." +
+      "</span>";
+
+    return;
+
+  }
+
+
+  button.disabled = true;
+
+  button.innerText =
+    "⏳ RICERCA...";
+
+
+  result.innerHTML =
+    "Ricerca dell'indirizzo in corso…";
+
+
+  addressFound = false;
+
+  document.getElementById("lat").value = "";
+
+  document.getElementById("lon").value = "";
+
+
+  try{
+
+    const r =
+      await fetch(
+        "/api/geocode",
+        {
+          method:"POST",
+
+          headers:{
+            "Content-Type":"application/json"
+          },
+
+          body:JSON.stringify({
+            address: address
+          })
+        }
+      );
+
+
+    const d =
+      await r.json();
+
+
+    if(!r.ok || !d.success){
+
+      throw new Error(
+        d.error ||
+        "Indirizzo non trovato."
+      );
+
+    }
+
+
+    /*
+      Salviamo le coordinate
+      senza mostrarle all'utente.
+    */
+
+    document.getElementById("lat").value =
+      d.lat;
+
+    document.getElementById("lon").value =
+      d.lon;
+
+
+    addressFound = true;
+
+
+    /*
+      Mostriamo invece l'indirizzo
+      trovato dal sistema.
+    */
+
+    result.innerHTML =
+
+      "<span style='color:#168447;font-weight:bold'>" +
+      "✅ Indirizzo trovato" +
+      "</span><br>" +
+
+      "<span style='font-size:13px'>" +
+      (d.display_name || address) +
+      "</span>";
+
+
+    document.getElementById("locationNote").innerHTML =
+
+      "✅ Posizione individuata automaticamente. " +
+      "Ora puoi procedere con il calcolo PVGIS.";
+
+
+  }
+
+
+  catch(e){
+
+    console.error(e);
+
+
+    result.innerHTML =
+
+      "<span style='color:#b00020;font-weight:bold'>" +
+      "⚠️ Indirizzo non trovato." +
+      "</span><br>" +
+
+      "<span style='font-size:13px'>" +
+      "Controlla via, numero civico e Comune e riprova." +
+      "</span>";
+
+  }
+
+
+  finally{
+
+    button.disabled = false;
+
+    button.innerText =
+      "📍 TROVA INDIRIZZO";
+
+  }
+
+}
+
+
+/* =========================================================
+   ENTER NEL CAMPO INDIRIZZO
+========================================================= */
+
+document
+  .getElementById("address")
+  .addEventListener(
+    "keydown",
+    function(e){
+
+      if(e.key === "Enter"){
+
+        e.preventDefault();
+
+        geocodeAddress();
+
+      }
+
+    }
+  );
 
 
 /* =========================================================
@@ -262,10 +501,36 @@ async function getPVGIS(){
     document.getElementById("pvgisResult");
 
 
-  if(!v("lat") || !v("lon")){
+  /*
+    Controllo indirizzo.
+  */
+
+  if(!v("address").trim()){
 
     result.innerHTML =
-      "<b>Inserisci latitudine e longitudine.</b>";
+      "<b>Inserisci prima l'indirizzo dell'immobile.</b>";
+
+    return;
+
+  }
+
+
+  /*
+    Controllo coordinate.
+  */
+
+  if(
+    !v("lat") ||
+    !v("lon") ||
+    !addressFound
+  ){
+
+    result.innerHTML =
+
+      "<b>Prima trova l'indirizzo.</b><br>" +
+
+      "Clicca sul pulsante " +
+      "<b>📍 TROVA INDIRIZZO</b>.";
 
     return;
 
@@ -273,7 +538,7 @@ async function getPVGIS(){
 
 
   result.innerHTML =
-    "Calcolo PVGIS in corso…";
+    "☀️ Calcolo PVGIS in corso…";
 
 
   try{
@@ -318,24 +583,17 @@ async function getPVGIS(){
       await r.json();
 
 
-    /*
-      SALVIAMO I DATI REALI DI PVGIS
-    */
-
     annualProduction =
       Number(d.annual_kwh) || 0;
 
 
     monthlyProduction =
       Array.isArray(d.monthly_kwh)
-        ? d.monthly_kwh.map(x => Number(x) || 0)
+        ? d.monthly_kwh.map(
+            x => Number(x) || 0
+          )
         : [];
 
-
-    /*
-      Controllo di sicurezza:
-      PVGIS deve restituire 12 mesi.
-    */
 
     if(monthlyProduction.length !== 12){
 
@@ -393,9 +651,9 @@ async function getPVGIS(){
 
       "<b>Errore nel collegamento a PVGIS.</b><br>" +
 
-      "Controlla coordinate e connessione internet " +
+      "Controlla l'indirizzo inserito e " +
 
-      "del computer che esegue l'app.";
+      "la connessione internet.";
 
   }
 
@@ -487,7 +745,7 @@ async function calculate(){
 
         "€ " +
 
-        value.toLocaleString(
+        Number(value).toLocaleString(
           "it-IT",
           {
             maximumFractionDigits:0
@@ -504,10 +762,6 @@ async function calculate(){
 
         : "n.d.";
 
-
-    /*
-      Milestone economici
-    */
 
     const milestones =
       [1,5,10,15,20,25];
@@ -567,7 +821,6 @@ async function calculate(){
 
         <div class="kpis">
 
-
           <div class="kpi">
 
             <small>
@@ -589,7 +842,7 @@ async function calculate(){
             </small>
 
             <b>
-              ${d.self_used.toFixed(0)}
+              ${Number(d.self_used).toFixed(0)}
               kWh
             </b>
 
@@ -603,7 +856,7 @@ async function calculate(){
             </small>
 
             <b>
-              ${d.export.toFixed(0)}
+              ${Number(d.export).toFixed(0)}
               kWh
             </b>
 
@@ -624,19 +877,15 @@ async function calculate(){
 
           </div>
 
-
         </div>
 
 
         <h3 class="economic-title">
-
           💶 RISULTATO ECONOMICO
-
         </h3>
 
 
         <div class="summary">
-
 
           <div>
 
@@ -692,7 +941,6 @@ async function calculate(){
             </strong>
 
           </div>
-
 
         </div>
 
@@ -771,7 +1019,8 @@ async function calculate(){
       >
 
         <button
-          onclick="generatePDF()"
+          type="button"
+          onclick="generatePDF(event)"
           style="
             font-size:16px;
             padding:14px 24px;
@@ -811,10 +1060,10 @@ async function calculate(){
    GENERAZIONE PDF
 ========================================================= */
 
-async function generatePDF(){
+async function generatePDF(event){
 
   const button =
-    event.target;
+    event.currentTarget;
 
 
   try{
@@ -824,12 +1073,6 @@ async function generatePDF(){
     button.innerText =
       "⏳ GENERAZIONE PDF...";
 
-
-    /*
-      Controllo importante:
-      senza produzione mensile non genero
-      un PDF con dati falsati.
-    */
 
     if(
       !monthlyProduction ||
@@ -910,14 +1153,6 @@ async function generatePDF(){
             production:
               annualProduction,
 
-
-            /*
-              QUESTO È IL PUNTO FONDAMENTALE.
-
-              Il backend app.py cerca "monthly",
-              quindi dobbiamo usare esattamente
-              questo nome.
-            */
 
             monthly:
               monthlyProduction
