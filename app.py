@@ -15,7 +15,7 @@ PVGIS_URL = "https://re.jrc.ec.europa.eu/api/v5_3/PVcalc"
 GEOCODING_URL = "https://nominatim.openstreetmap.org/search"
 PAGE_W, PAGE_H = A4
 GEOCODE_CACHE = {}
-GRID_PURCHASE_PCT = 0.12
+GRID_PURCHASE_PCT = 0.15
 
 
 # ============================================================
