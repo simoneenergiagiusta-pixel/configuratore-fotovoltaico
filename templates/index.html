@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Configuratore Fotovoltaico</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <header>
+    <h1>Configuratore Fotovoltaico</h1>
+    <p>Produzione geolocalizzata + stima del ritorno dell'investimento</p>
+  </header>
+
+  <section class="card">
+    <h2>1. Dati impianto e cliente</h2>
+
+    <div class="grid">
+
+      <label style="grid-column:1 / -1;">
+        📍 Indirizzo dell'immobile
+
+        <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;">
+          <input
+            id="address"
+            placeholder="Via, civico, CAP, Comune"
+            autocomplete="street-address"
+            style="flex:1;min-width:220px;"
+          >
+
+          <button
+            id="geocodeButton"
+            type="button"
+            onclick="geocodeAddress()"
+            style="white-space:nowrap;padding:10px 16px;font-weight:bold;cursor:pointer;"
+          >
+            📍 TROVA INDIRIZZO
+          </button>
+        </div>
+
+        <div id="addressResult" style="margin-top:8px;font-size:14px;"></div>
+      </label>
+
+      <input id="lat" type="hidden">
+      <input id="lon" type="hidden">
+
+      <label>
+        Potenza FV (kWp)
+        <input id="kwp" type="number" step="0.01" value="6">
+      </label>
+
+      <label>
+        Batteria (kWh)
+        <input id="battery" type="number" step="0.1" value="6.2">
+      </label>
+
+      <label>
+        Inclinazione (°)
+        <input id="angle" type="number" step="1" value="30">
+      </label>
+
+      <label>
+        Orientamento pannelli
+        <select id="aspect">
+          <option value="-180">Nord (±180°)</option>
+          <option value="-135">Nord-Est (-135°)</option>
+          <option value="-90">Est (-90°)</option>
+          <option value="-45">Sud-Est (-45°)</option>
+          <option value="0" selected>Sud (0°)</option>
+          <option value="45">Sud-Ovest (+45°)</option>
+          <option value="90">Ovest (+90°)</option>
+          <option value="135">Nord-Ovest (+135°)</option>
+          <option value="custom">Personalizzato</option>
+        </select>
+      </label>
+
+      <label id="customAspectContainer" style="display:none;">
+        Azimut personalizzato (°)
+        <input id="customAspect" type="number" min="-180" max="180" step="1" value="0" placeholder="Es. -30">
+        <small style="display:block;margin-top:4px;opacity:.7;">Da -180° a +180°. 0° = Sud.</small>
+      </label>
+
+      <label>
+        Perdite sistema (%)
+        <input id="loss" type="number" step="0.1" value="14">
+      </label>
+
+      <label>
+        Consumo annuo (kWh)
+        <input id="consumption" type="number" step="1" value="6500">
+      </label>
+
+      <label>
+        Profilo consumi
+        <select id="profile">
+          <option value="giorno">Prevalentemente giorno</option>
+          <option value="equilibrato" selected>Equilibrato</option>
+          <option value="sera">Prevalentemente sera/notte</option>
+        </select>
+      </label>
+
+      <label>
+        Costo impianto (€)
+        <input id="cost" type="number" step="1" value="10990">
+      </label>
+
+      <label>
+        Detrazione totale (€)
+        <input id="deduction" type="number" step="1" value="5495">
+      </label>
+
+      <label>
+        Prezzo energia acquistata (€/kWh)
+        <input id="energy_price" type="number" step="0.01" value="0.25">
+      </label>
+
+      <label>
+        Valore energia immessa (€/kWh)
+        <input id="export_price" type="number" step="0.01" value="0.10">
+      </label>
+    </div>
+
+    <p class="note" id="locationNote">
+      📍 Inserisci l'indirizzo dell'immobile e clicca <b>"Trova indirizzo"</b>.
+      Le coordinate verranno individuate automaticamente.
+    </p>
+
+    <button type="button" onclick="getPVGIS()">
+      🔎 CALCOLA PRODUZIONE CON PVGIS
+    </button>
+  </section>
+
+  <section class="card">
+    <h2>2. Risultato PVGIS</h2>
+    <div id="pvgisResult" class="result">
+      Inserisci l'indirizzo e avvia il calcolo.
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. Ritorno dell'investimento</h2>
+    <button type="button" onclick="calculate()">
+      📊 CALCOLA RITORNO DELL'INVESTIMENTO
+    </button>
+    <div id="roiResult" class="result"></div>
+  </section>
+
+</div>
+
+<script>
+
+let annualProduction = 0;
+let monthlyProduction = [];
+let addressFound = false;
+
+const v = id => document.getElementById(id).value;
+
+function getAspectValue(){
+  const selected = v("aspect");
+
+  if(selected === "custom"){
+    let custom = Number(v("customAspect"));
+    if(!Number.isFinite(custom)) custom = 0;
+    custom = Math.max(-180, Math.min(180, custom));
+    return custom;
+  }
+
+  return Number(selected);
+}
+
+function getAspectLabel(){
+  const selected = v("aspect");
+
+  if(selected === "custom"){
+    const azimuth = getAspectValue();
+    return "Personalizzato (" + (azimuth > 0 ? "+" : "") + azimuth + "°)";
+  }
+
+  const option = document.querySelector('#aspect option[value="' + selected + '"]');
+  return option ? option.textContent.trim() : selected + "°";
+}
+
+function updateCustomAspect(){
+  const container = document.getElementById("customAspectContainer");
+  container.style.display = v("aspect") === "custom" ? "block" : "none";
+}
+
+document.getElementById("aspect").addEventListener("change", updateCustomAspect);
+
+
+/* =========================================================
+   GEOCODIFICA INDIRIZZO - CORRETTA
+========================================================= */
+
+async function geocodeAddress(){
+
+  const address = v("address").trim();
+  const result = document.getElementById("addressResult");
+  const button = document.getElementById("geocodeButton");
+
+  if(!address){
+    result.innerHTML =
+      "<span style='color:#b00020;font-weight:bold'>⚠️ Inserisci prima un indirizzo.</span>";
+    return;
+  }
+
+  button.disabled = true;
+  button.innerText = "⏳ RICERCA...";
+  result.innerHTML = "Ricerca dell'indirizzo in corso…";
+
+  addressFound = false;
+  document.getElementById("lat").value = "";
+  document.getElementById("lon").value = "";
+
+  try{
+
+    const r = await fetch("/api/geocode", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({address: address})
+    });
+
+    let d;
+
+    try{
+      d = await r.json();
+    }catch(parseError){
+      throw new Error(
+        "Il server non ha restituito una risposta valida. Codice HTTP " + r.status
+      );
+    }
+
+    if(!r.ok || !d.success){
+      throw new Error(d.error || "Indirizzo non trovato.");
+    }
+
+    document.getElementById("lat").value = d.lat;
+    document.getElementById("lon").value = d.lon;
+    addressFound = true;
+
+    result.innerHTML =
+      "<span style='color:#168447;font-weight:bold'>✅ Indirizzo trovato</span><br>" +
+      "<span style='font-size:13px'>" + (d.display_name || address) + "</span>";
+
+    document.getElementById("locationNote").innerHTML =
+      "✅ Posizione individuata automaticamente. Ora puoi procedere con il calcolo PVGIS.";
+
+  }catch(e){
+
+    console.error(e);
+
+    result.innerHTML =
+      "<span style='color:#b00020;font-weight:bold'>⚠️ Ricerca indirizzo non riuscita.</span><br>" +
+      "<span style='font-size:13px'>" +
+      (e.message || "Controlla via, numero civico e Comune e riprova.") +
+      "</span>";
+
+  }finally{
+
+    button.disabled = false;
+    button.innerText = "📍 TROVA INDIRIZZO";
+
+  }
+}
+
+
+/* =========================================================
+   SE L'INDIRIZZO VIENE MODIFICATO, INVALIDA LE COORDINATE
+========================================================= */
+
+document.getElementById("address").addEventListener("input", function(){
+  addressFound = false;
+  document.getElementById("lat").value = "";
+  document.getElementById("lon").value = "";
+});
+
+
+/* =========================================================
+   ENTER NEL CAMPO INDIRIZZO
+========================================================= */
+
+document.getElementById("address").addEventListener("keydown", function(e){
+  if(e.key === "Enter"){
+    e.preventDefault();
+    geocodeAddress();
+  }
+});
+
+
+/* =========================================================
+   PVGIS
+========================================================= */
+
+async function getPVGIS(){
+
+  const result = document.getElementById("pvgisResult");
+
+  if(!v("address").trim()){
+    result.innerHTML = "<b>Inserisci prima l'indirizzo dell'immobile.</b>";
+    return;
+  }
+
+  if(!v("lat") || !v("lon") || !addressFound){
+    result.innerHTML =
+      "<b>Prima trova l'indirizzo.</b><br>" +
+      "Clicca sul pulsante <b>📍 TROVA INDIRIZZO</b>.";
+    return;
+  }
+
+  const aspect = getAspectValue();
+  result.innerHTML = "☀️ Calcolo PVGIS in corso…";
+
+  try{
+
+    const r = await fetch("/api/pvgis", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        lat:v("lat"),
+        lon:v("lon"),
+        kwp:v("kwp"),
+        angle:v("angle"),
+        aspect:aspect,
+        loss:v("loss")
+      })
+    });
+
+    let d;
+
+    try{
+      d = await r.json();
+    }catch(parseError){
+      throw new Error("PVGIS non ha restituito una risposta valida.");
+    }
+
+    if(!r.ok){
+      throw new Error(d.error || "Errore risposta PVGIS");
+    }
+
+    annualProduction = Number(d.annual_kwh) || 0;
+
+    monthlyProduction =
+      Array.isArray(d.monthly_kwh)
+        ? d.monthly_kwh.map(x => Number(x) || 0)
+        : [];
+
+    if(monthlyProduction.length !== 12){
+      throw new Error("PVGIS non ha restituito i 12 valori mensili.");
+    }
+
+    result.innerHTML = `
+      <div class="big">
+        ${annualProduction.toFixed(0)} kWh/anno
+      </div>
+
+      <p>
+        Produzione stimata da PVGIS 5.3,
+        con posizione, potenza, inclinazione,
+        orientamento e perdite impostate.
+      </p>
+
+      <p style="margin-top:10px;font-weight:bold;">
+        🧭 Orientamento: ${getAspectLabel()}
+      </p>
+
+      <div class="months">
+        ${monthlyProduction.map((x,i)=>
+          `<span>
+            <b>${i+1}</b><br>
+            ${x.toFixed(0)}
+          </span>`
+        ).join("")}
+      </div>
+    `;
+
+  }catch(e){
+
+    console.error(e);
+
+    result.innerHTML =
+      "<b>Errore nel collegamento a PVGIS.</b><br>" +
+      "<span style='font-size:13px'>" +
+      (e.message || "Controlla i dati inseriti e riprova.") +
+      "</span>";
+  }
+}
+
+
+/* =========================================================
+   CALCOLO ROI
+========================================================= */
+
+async function calculate(){
+
+  const result = document.getElementById("roiResult");
+
+  if(!annualProduction){
+    result.innerHTML = "Prima esegui il calcolo PVGIS.";
+    return;
+  }
+
+  result.innerHTML = "Calcolo in corso…";
+
+  try{
+
+    const r = await fetch("/api/calculate", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        production:annualProduction,
+        consumption:v("consumption"),
+        battery:v("battery"),
+        energy_price:v("energy_price"),
+        export_price:v("export_price"),
+        cost:v("cost"),
+        deduction:v("deduction"),
+        profile:v("profile")
+      })
+    });
+
+    if(!r.ok){
+      throw new Error("Errore nel calcolo");
+    }
+
+    const d = await r.json();
+
+    const formatEuro = value =>
+      "€ " + Number(value).toLocaleString("it-IT",{maximumFractionDigits:0});
+
+    const payback =
+      d.payback
+        ? d.payback.toFixed(1) + " anni"
+        : "n.d.";
+
+    const milestones = [1,5,10,15,20,25];
+
+    const rows = milestones.map(year => {
+
+      const item = d.years.find(x => x.year === year);
+
+      if(!item) return "";
+
+      return `
+        <tr>
+          <td><b>${year}° anno</b></td>
+          <td>${formatEuro(item.benefit)}</td>
+          <td><b>${formatEuro(Math.max(0,item.cumulative))}</b></td>
+        </tr>
+      `;
+
+    }).join("");
+
+    result.innerHTML = `
+      <div class="results-section">
+
+        <h3>📊 RISULTATO DELLA SIMULAZIONE</h3>
+
+        <div class="kpis">
+
+          <div class="kpi">
+            <small>☀️ Produzione annua</small>
+            <b>${annualProduction.toFixed(0)} kWh</b>
+          </div>
+
+          <div class="kpi">
+            <small>🏠 Autoconsumo stimato</small>
+            <b>${Number(d.self_used).toFixed(0)} kWh</b>
+          </div>
+
+          <div class="kpi">
+            <small>⚡ Energia immessa</small>
+            <b>${Number(d.export).toFixed(0)} kWh</b>
+          </div>
+
+          <div class="kpi highlight">
+            <small>💰 Risparmio annuo</small>
+            <b>${formatEuro(d.annual_saving)}</b>
+          </div>
+
+        </div>
+
+        <h3 class="economic-title">💶 RISULTATO ECONOMICO</h3>
+
+        <div class="summary">
+
+          <div>
+            <span>Investimento netto</span>
+            <strong>${formatEuro(d.net_cost)}</strong>
+          </div>
+
+          <div>
+            <span>Rientro stimato</span>
+            <strong>${payback}</strong>
+          </div>
+
+          <div>
+            <span>Beneficio cumulato a 25 anni</span>
+            <strong>
+              ${formatEuro(
+                d.years.length
+                  ? Math.max(0,d.years[d.years.length-1].cumulative)
+                  : 0
+              )}
+            </strong>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="projection">
+
+        <h3>📈 PROIEZIONE ECONOMICA</h3>
+
+        <p>
+          Stima del beneficio economico cumulato
+          nel tempo, considerando un degrado della
+          produzione dello 0,5% annuo.
+        </p>
+
+        <table class="projection-table">
+          <thead>
+            <tr>
+              <th>Periodo</th>
+              <th>Beneficio dell'anno</th>
+              <th>Beneficio cumulato</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+
+      </div>
+
+      <p class="note">
+        Stima commerciale: il risultato dipende
+        da tariffe, profilo reale dei consumi,
+        condizioni di scambio/ritiro,
+        ombreggiamento e altri fattori.
+
+        <br><br>
+
+        Non è un preventivo finanziario.
+      </p>
+
+      <div style="margin-top:25px;text-align:center;">
+        <button
+          type="button"
+          onclick="generatePDF(event)"
+          style="font-size:16px;padding:14px 24px;font-weight:bold;cursor:pointer;"
+        >
+          📄 GENERA REPORT PDF
+        </button>
+      </div>
+    `;
+
+  }catch(e){
+
+    console.error(e);
+
+    result.innerHTML =
+      "<b>Errore nel calcolo.</b><br>" +
+      "Controlla i dati inseriti e riprova.";
+  }
+}
+
+
+/* =========================================================
+   GENERAZIONE PDF
+========================================================= */
+
+async function generatePDF(event){
+
+  const button = event.currentTarget;
+
+  try{
+
+    button.disabled = true;
+    button.innerText = "⏳ GENERAZIONE PDF...";
+
+    if(!monthlyProduction || monthlyProduction.length !== 12){
+      throw new Error("Dati mensili PVGIS non disponibili.");
+    }
+
+    const r = await fetch("/api/pdf", {
+
+      method:"POST",
+
+      headers:{
+        "Content-Type":"application/json"
+      },
+
+      body:JSON.stringify({
+        address:v("address").toUpperCase(),
+        lat:v("lat"),
+        lon:v("lon"),
+        kwp:v("kwp"),
+        battery:v("battery"),
+        angle:v("angle"),
+        aspect:getAspectValue(),
+        loss:v("loss"),
+        consumption:v("consumption"),
+        profile:v("profile"),
+        cost:v("cost"),
+        deduction:v("deduction"),
+        energy_price:v("energy_price"),
+        export_price:v("export_price"),
+        production:annualProduction,
+        monthly:monthlyProduction
+      })
+    });
+
+    if(!r.ok){
+      throw new Error("Errore nella generazione del PDF");
+    }
+
+    const blob = await r.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = "Analisi_Fotovoltaica_Energia_Giusta.pdf";
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+
+    button.disabled = false;
+    button.innerText = "📄 GENERA REPORT PDF";
+
+  }catch(e){
+
+    console.error(e);
+
+    alert("Si è verificato un errore durante la generazione del PDF.");
+
+    button.disabled = false;
+    button.innerText = "📄 GENERA REPORT PDF";
+  }
+}
+
+</script>
+
+</body>
+</html>
