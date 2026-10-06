@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, jsonify, send_file
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-import json, io, math
+from urllib.error import HTTPError, URLError
+import json, io, math, socket
 
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
@@ -98,6 +99,15 @@ def pvgis(params):
 
 
 def geocode_address(address):
+    """
+    Converte un indirizzo italiano in coordinate tramite
+    OpenStreetMap / Nominatim.
+
+    La funzione usa una cache locale per evitare richieste
+    ripetute dello stesso indirizzo e restituisce messaggi
+    più chiari in caso di errore HTTP, timeout o rete.
+    """
+
     address = " ".join(str(address or "").strip().split())
 
     if not address:
@@ -117,25 +127,65 @@ def geocode_address(address):
         "accept-language": "it"
     }
 
+    url = GEOCODING_URL + "?" + urlencode(params)
+
     req = Request(
-        GEOCODING_URL + "?" + urlencode(params),
+        url,
         headers={
-            "User-Agent": "ConfiguratoreFotovoltaico/1.0 (Energia Giusta)"
+            "User-Agent": "EnergiaGiusta-ConfiguratoreFotovoltaico/1.0 (https://www.energiagiusta.it)",
+            "Accept": "application/json",
+            "Accept-Language": "it-IT,it;q=0.9",
+            "Referer": "https://www.energiagiusta.it/"
         }
     )
 
-    with urlopen(req, timeout=10) as r:
-        data = json.loads(r.read().decode("utf-8"))
+    try:
+        with urlopen(req, timeout=15) as r:
+            raw = r.read().decode("utf-8")
+            data = json.loads(raw)
+
+    except HTTPError as e:
+        if e.code == 403:
+            raise RuntimeError(
+                "Il servizio di ricerca indirizzi ha rifiutato la richiesta (HTTP 403)."
+            )
+        if e.code == 429:
+            raise RuntimeError(
+                "Troppe richieste al servizio di ricerca indirizzi. Attendi qualche secondo e riprova."
+            )
+        raise RuntimeError(
+            f"Errore del servizio di ricerca indirizzi (HTTP {e.code})."
+        )
+
+    except (URLError, socket.timeout, TimeoutError):
+        raise RuntimeError(
+            "Il servizio di ricerca indirizzi non è raggiungibile in questo momento. Riprova tra qualche secondo."
+        )
+
+    except json.JSONDecodeError:
+        raise RuntimeError(
+            "Il servizio di ricerca indirizzi ha restituito una risposta non valida."
+        )
 
     if not data:
         raise ValueError(
-            "Indirizzo non trovato. Inserisci via, numero civico e comune."
+            "Indirizzo non trovato. Prova a scrivere via, numero civico, CAP e Comune."
+        )
+
+    result = data[0]
+
+    try:
+        lat = float(result["lat"])
+        lon = float(result["lon"])
+    except (KeyError, TypeError, ValueError):
+        raise RuntimeError(
+            "Il servizio di ricerca indirizzi ha restituito coordinate non valide."
         )
 
     out = {
-        "lat": float(data[0]["lat"]),
-        "lon": float(data[0]["lon"]),
-        "display_name": data[0].get("display_name", address)
+        "lat": lat,
+        "lon": lon,
+        "display_name": result.get("display_name", address)
     }
 
     GEOCODE_CACHE[key] = out
@@ -161,8 +211,10 @@ def index():
 @app.post("/api/geocode")
 def api_geocode():
     try:
+        payload = request.get_json(silent=True) or {}
+
         r = geocode_address(
-            (request.get_json(force=True) or {}).get("address", "")
+            payload.get("address", "")
         )
 
         return jsonify({
@@ -170,11 +222,25 @@ def api_geocode():
             **r
         })
 
-    except Exception as e:
+    except ValueError as e:
         return jsonify({
             "success": False,
             "error": str(e)
         }), 400
+
+    except RuntimeError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 503
+
+    except Exception as e:
+        app.logger.exception("Errore imprevisto durante la geocodifica")
+
+        return jsonify({
+            "success": False,
+            "error": "Errore imprevisto durante la ricerca dell'indirizzo."
+        }), 500
 
 
 @app.post("/api/pvgis")
